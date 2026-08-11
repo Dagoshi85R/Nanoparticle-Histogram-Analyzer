@@ -23,7 +23,7 @@ DEFAULT_CHANNELS = {
 
 # --- Sidebar: Upload & Settings ---
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/en/thumb/e/eb/The_University_of_Edinburgh_logo.svg/320px-The_University_of_Edinburgh_logo.svg.png", width=150)
+    st.image("logo.png", use_container_width=True)
     st.title("ZetaSphere Analyzer")
     st.caption("Created by Daniel Gonzalez Silvera.\nImaging Facility, IRR, The University of Edinburgh.\n2026")
     
