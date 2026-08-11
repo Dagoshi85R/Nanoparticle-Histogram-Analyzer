@@ -54,3 +54,5 @@ If you prefer to run this app offline on your own machine rather than using the 
 3. Install the required dependencies:
    ```bash
    pip install -r requirements.txt
+4. Launch the Streamlit app:
+   streamlit run Z_histograms1.0.py
