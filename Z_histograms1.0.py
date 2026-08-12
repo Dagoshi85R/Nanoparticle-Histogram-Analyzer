@@ -7,6 +7,7 @@ import zipfile
 import io
 import itertools
 import warnings
+import math
 from sklearn.mixture import GaussianMixture
 from scipy.stats import gaussian_kde, mannwhitneyu, wasserstein_distance, anderson_ksamp
 
@@ -21,16 +22,36 @@ DEFAULT_CHANNELS = {
     '640f660.lp': ('640 nm', '#FF0000')
 }
 
+PALETTES = {
+    "Custom (Sample Colors)": None,
+    "Viridis": "viridis",
+    "Plasma": "plasma",
+    "Pastel": "pastel",
+    "Colorblind": "colorblind",
+    "Spectral": "Spectral",
+    "Set1": "Set1",
+    "Set2": "Set2",
+    "Husl": "husl"
+}
+
 # --- Sidebar: Upload & Settings ---
 with st.sidebar:
     st.image("logo.png", use_container_width=True)
     st.title("ZetaSphere Analyzer")
-    st.caption("Created by Daniel Gonzalez Silvera.\nImaging Facility, IRR, The University of Edinburgh.\n2026")
+    st.caption("Created by XXXXX\nImaging Facility, IRR, The University of Edinburgh 2026")
     
     st.header("1. Upload Data")
     uploaded_files = st.file_uploader("Drag & Drop ZetaSphere .zip files (Multiple Samples Supported)", type=["zip"], accept_multiple_files=True)
     
     st.header("2. Display Customization")
+    palette_choice = st.selectbox("Color Palette", list(PALETTES.keys()), help="Select a predefined colorset, or use your custom manual colors.")
+    multi_layout = st.radio("Multi-Sample Layout", ["Overlay (Default)", "Facet Grid", "Ridgeline (Joyplot)"], help="Choose how multiple active samples are displayed.")
+    
+    if multi_layout == "Facet Grid":
+        facet_share_y = st.checkbox("Share Y-Axis across Facets", value=True, help="Keep all subplots on the exact same vertical scale.")
+    else:
+        facet_share_y = False
+        
     display_style = st.radio("Plot Style", ["Both (Bar + Curve)", "Smooth Curve Only", "Histogram Only"])
     central_marker = st.radio("Draw Vertical Marker", ["None", "Mean", "Median", "Mode"])
     
@@ -40,166 +61,219 @@ with st.sidebar:
     with col_c2:
         axes_color = st.color_picker("Axes & Text Color", "#000000")
         
-    line_width = st.slider("Line Thickness", min_value=0.5, max_value=5.0, value=1.5, step=0.5)
+    st.markdown("---")
+    st.markdown("**Graph Sizing & Typography**")
+    line_width = st.slider("Plot Line Thickness", min_value=0.5, max_value=5.0, value=1.5, step=0.5)
+    axes_width = st.slider("Axis Box Thickness", min_value=0.5, max_value=3.0, value=1.0, step=0.5)
+    title_size = st.slider("Title Font Size", min_value=8, max_value=24, value=14, step=1)
+    label_size = st.slider("Axis Label & Tick Font Size", min_value=8, max_value=20, value=10, step=1)
+    legend_size = st.slider("Legend Font Size", min_value=6, max_value=16, value=10, step=1)
     
     show_grid = st.checkbox("Show Grid Lines", value=False)
     show_legend = st.checkbox("Show Legend", value=True)
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
 
-    st.header("3. Statistical Analysis")
-    stats_tests = st.multiselect(
-        "Pairwise Comparison Tests", 
-        ["Mann-Whitney U (Medians)", "Earth Mover's Distance (EMD)", "Anderson-Darling (Shape/Tails)"], 
-        default=["Mann-Whitney U (Medians)"]
-    )
-
 # --- Helper Functions ---
 def parse_file_info(uploaded_file):
-    name_lower = uploaded_file.name.lower()
+    filename = uploaded_file.name
+    parts = filename.split('_')
     
     measurement = "Unknown"
-    if "zeta" in name_lower and "potential" in name_lower:
-        measurement = "Zeta_Potential"
-    elif "concentration" in name_lower:
-        measurement = "Concentration"
-    elif "size" in name_lower:
-        measurement = "Size"
-        
+    channel_str = ""
+    
+    # Extract measurement and channel string strictly by their position in the filename structure
+    if len(parts) >= 4:
+        meas_part = parts[2].lower()
+        if meas_part == "size":
+            measurement = "Size"
+            channel_str = parts[3].lower()
+        elif meas_part == "concentration":
+            measurement = "Concentration"
+            channel_str = parts[3].lower()
+        elif meas_part == "colocalization":
+            measurement = "Colocalization"
+            channel_str = parts[3].lower()
+        elif meas_part == "zeta":
+            if parts[3].lower() == "potential" and len(parts) >= 5:
+                measurement = "Zeta_Potential"
+                channel_str = parts[4].lower()
+            else:
+                measurement = "Zeta_Potential"
+                channel_str = parts[3].lower()
+                
+    # Extract clean channel names
     channel_name = "Unknown"
-    for code, (c_name, color) in DEFAULT_CHANNELS.items():
-        if code.lower() in name_lower:
-            channel_name = c_name
-            break
-            
+    if measurement == "Colocalization":
+        found = []
+        for code, (c_name, color) in DEFAULT_CHANNELS.items():
+            idx = channel_str.find(code.lower())
+            if idx != -1:
+                found.append((idx, c_name, color))
+        found.sort()
+        if len(found) >= 2:
+            channel_name = f"{found[0][1]} vs {found[1][1]}"
+        else:
+            channel_name = "Colocalization"
+    else:
+        for code, (c_name, color) in DEFAULT_CHANNELS.items():
+            if code.lower() in channel_str:
+                channel_name = c_name
+                break
+                
     return measurement, channel_name
 
 def extract_dataframe(uploaded_zip):
     try:
         with zipfile.ZipFile(uploaded_zip) as z:
             csv_files = [f for f in z.namelist() if f.endswith('measurement_result.csv')]
-            if not csv_files: # Fallback if named differently
-                csv_files = [f for f in z.namelist() if f.endswith('.csv')]
+            if not csv_files: csv_files = [f for f in z.namelist() if f.endswith('.csv')]
             if csv_files:
-                with z.open(csv_files[0]) as f:
-                    return pd.read_csv(f)
+                with z.open(csv_files[0]) as f: return pd.read_csv(f)
     except Exception as e:
         st.error(f"Error reading {uploaded_zip.name}: {e}")
     return None
 
 def find_data_column(df, possible_names):
     for col in df.columns:
-        if any(name.lower() == col.lower() for name in possible_names):
-            return col
+        if any(name.lower() == col.lower() for name in possible_names): return col
     for col in df.columns:
-        if any(name.lower() in col.lower() for name in possible_names):
-            return col
+        if any(name.lower() in col.lower() for name in possible_names): return col
     return None
 
 def get_mode_from_kde(series):
     data = series.dropna()
-    if len(data) < 2:
-        return np.nan
+    if len(data) < 2: return np.nan
     kde = gaussian_kde(data)
     x_vals = np.linspace(data.min(), data.max(), 1000)
-    y_vals = kde(x_vals)
-    return x_vals[np.argmax(y_vals)]
+    return x_vals[np.argmax(kde(x_vals))]
 
-def run_stats_comparisons(data_a, data_b, tests_list):
+def run_stats_comparisons(data_a, data_b):
     results = {}
-    if len(data_a) == 0 or len(data_b) == 0:
-        return results
+    if len(data_a) == 0 or len(data_b) == 0: return results
+    
+    # 1. Mann-Whitney U
+    _, p_val = mannwhitneyu(data_a, data_b, alternative='two-sided')
+    results["MW p-value"] = "< 0.001" if p_val < 0.001 else f"{p_val:.3f}"
+    
+    # 2. Earth Mover's Distance (EMD)
+    results["EMD Score"] = f"{wasserstein_distance(data_a, data_b):.2f}"
+    
+    # 3. Anderson-Darling
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ad_p = anderson_ksamp([data_a, data_b]).pvalue
+            results["AD p-value"] = "< 0.001" if ad_p <= 0.001 else ("> 0.250" if ad_p >= 0.25 else f"{ad_p:.3f}")
+    except Exception:
+        results["AD p-value"] = "Error"
         
-    if "Mann-Whitney U (Medians)" in tests_list:
-        _, p_val = mannwhitneyu(data_a, data_b, alternative='two-sided')
-        results["MW p-value"] = "< 0.001" if p_val < 0.001 else f"{p_val:.3f}"
-        
-    if "Earth Mover's Distance (EMD)" in tests_list:
-        emd = wasserstein_distance(data_a, data_b)
-        results["EMD Score"] = f"{emd:.2f}"
-        
-    if "Anderson-Darling (Shape/Tails)" in tests_list:
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                ad_res = anderson_ksamp([data_a, data_b])
-                ad_p = ad_res.pvalue
-                results["AD p-value"] = "< 0.001" if ad_p <= 0.001 else ("> 0.250" if ad_p >= 0.25 else f"{ad_p:.3f}")
-        except Exception:
-            results["AD p-value"] = "Error"
-            
     return results
 
 def apply_custom_style(ax, title, xlabel, ylabel, xlim, bg, fg, grid, draw_legend=True):
     ax.set_facecolor(bg)
-    ax.set_title(title, color=fg)
-    ax.set_xlabel(xlabel, color=fg)
-    ax.set_ylabel(ylabel, color=fg)
+    ax.set_title(title, color=fg, fontsize=title_size)
+    ax.set_xlabel(xlabel, color=fg, fontsize=label_size)
+    ax.set_ylabel(ylabel, color=fg, fontsize=label_size)
     if xlim is not None: ax.set_xlim(xlim)
-    ax.tick_params(colors=fg)
-    for spine in ax.spines.values(): spine.set_color(fg)
+    
+    # Apply tick size and axis box thickness
+    ax.tick_params(colors=fg, labelsize=label_size, width=axes_width)
+    for spine in ax.spines.values(): 
+        spine.set_color(fg)
+        spine.set_linewidth(axes_width)
+        
     if grid: ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.3, color=fg)
     
+    # Apply legend formatting
     if draw_legend:
-        leg = ax.legend()
+        leg = ax.get_legend() # Check if Seaborn already made a legend
+        if leg is None:
+            leg = ax.legend(fontsize=legend_size) # If not, create one
         if leg is not None:
-            for text in leg.get_texts(): text.set_color(fg)
+            for text in leg.get_texts(): 
+                text.set_color(fg)
+                text.set_fontsize(legend_size)
+            if leg.get_title(): 
+                leg.get_title().set_color(fg)
+                leg.get_title().set_fontsize(legend_size)
             leg.get_frame().set_facecolor(bg)
             leg.get_frame().set_edgecolor(fg)
+    else:
+        # If "Show Legend" is unchecked, actively delete any existing legends
+        if ax.get_legend() is not None:
+            ax.get_legend().remove()
 
 def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, color, style, line_width, label, display_style):
     x_data = data[feature_col].dropna()
     if len(x_data) == 0: return
     
-    hist_label = label if display_style == "Histogram Only" else None
-    curve_label = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
+    hist_lbl = label if display_style == "Histogram Only" else None
+    curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-        ax.hist(x_data, bins=bins, histtype='step', color=color, linestyle=style, linewidth=line_width, label=hist_label)
+        ax.hist(x_data, bins=bins, histtype='step', color=color, linestyle=style, linewidth=line_width, label=hist_lbl)
         if display_style == "Both (Bar + Curve)":
             ax.hist(x_data, bins=bins, histtype='stepfilled', color=color, alpha=0.1)
             
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
         if len(x_data) > 1:
-            kde = gaussian_kde(x_data)
-            y_counts = kde(x_vals) * len(x_data) * bin_width
-            ax.plot(x_vals, y_counts, color=color, linestyle=style, linewidth=line_width, label=curve_label)
+            y_counts = gaussian_kde(x_data)(x_vals) * len(x_data) * bin_width
+            ax.plot(x_vals, y_counts, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
 
 def plot_central_marker(ax, data, color, marker_type):
-    if marker_type == "Median":
-        val = data.median()
+    val = np.nan
+    if marker_type == "Median": val = data.median()
+    elif marker_type == "Mode": val = get_mode_from_kde(data)
+    elif marker_type == "Mean": val = data.mean()
+    
+    if pd.notna(val):
         ax.axvline(val, color=color, linestyle=':', linewidth=1.5, alpha=0.8)
-    elif marker_type == "Mode":
-        val = get_mode_from_kde(data)
-        if pd.notna(val):
-            ax.axvline(val, color=color, linestyle=':', linewidth=1.5, alpha=0.8)
-    elif marker_type == "Mean":
-        val = data.mean()
-        ax.axvline(val, color=color, linestyle=':', linewidth=1.5, alpha=0.8)
+
+def create_download_buttons(fig, filename_prefix):
+    dl_col1, dl_col2 = st.columns(2)
+    
+    # Generate PNG
+    buf_png = io.BytesIO()
+    fig.savefig(buf_png, format="png", bbox_inches="tight", dpi=300, transparent=True)
+    buf_png.seek(0)
+    with dl_col1:
+        st.download_button(
+            label="📥 PNG",
+            data=buf_png,
+            file_name=f"{filename_prefix}.png",
+            mime="image/png",
+            use_container_width=True
+        )
+        
+    # Generate SVG
+    buf_svg = io.BytesIO()
+    fig.savefig(buf_svg, format="svg", bbox_inches="tight", transparent=True)
+    buf_svg.seek(0)
+    with dl_col2:
+        st.download_button(
+            label="📥 SVG",
+            data=buf_svg,
+            file_name=f"{filename_prefix}.svg",
+            mime="image/svg+xml",
+            use_container_width=True
+        )
 
 # --- Main App Layout & Data Processing ---
 if not uploaded_files:
     st.info("Please upload your ZetaSphere .zip files in the sidebar to begin analysis.")
 else:
-    processed_data = {'Size': {}, 'Zeta_Potential': {}, 'Concentration': {}}
-    
+    processed_data = {'Size': {}, 'Zeta_Potential': {}, 'Concentration': {}, 'Colocalization': {}}
     for file in uploaded_files:
         measurement, channel = parse_file_info(file)
         df = extract_dataframe(file)
         if df is not None:
-            if channel not in processed_data.get(measurement, {}):
-                processed_data[measurement][channel] = []
-            
+            if channel not in processed_data.get(measurement, {}): processed_data[measurement][channel] = []
             default_color = '#000000'
             for raw_code, (name, hex_code) in DEFAULT_CHANNELS.items():
                 if name == channel: default_color = hex_code
-                
             processed_data[measurement][channel].append({
-                'filename': file.name,
-                'df': df,
-                'label': f"{channel} (Sample {len(processed_data[measurement][channel]) + 1})",
-                'color': default_color,
-                'active': True,
-                'dilution': 1.0
+                'filename': file.name, 'df': df, 'label': f"{channel} (Sample {len(processed_data[measurement][channel]) + 1})",
+                'color': default_color, 'active': True, 'dilution': 1.0
             })
 
     with st.expander("🎨 Customize Individual Samples (Labels & Colors)", expanded=True):
@@ -218,7 +292,7 @@ else:
                         st.write("---")
                     col_idx += 1
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Multi-Sample Size", "Zeta Potential", "Concentration", "Population Analysis (GMM)"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Multi-Sample Size", "Zeta Potential", "Concentration", "Population Analysis (GMM)", "Colocalization"])
 
     # ==========================================
     # TAB 1: SIZE OVERVIEW & MULTI-SAMPLE
@@ -228,7 +302,6 @@ else:
         if not processed_data['Size']:
             st.warning("No 'Size' measurement files detected.")
         else:
-            st.subheader("Active Channels")
             available_channels = list(processed_data['Size'].keys())
             active_channels = st.multiselect("Toggle Channels On/Off:", available_channels, default=available_channels)
             
@@ -244,75 +317,115 @@ else:
                     rep_mode = st.radio("Multi-Sample Handling:", ["Treat Independent", "Pool Data"], key="s_repmode")
             
             with col2:
-                fig_size, ax_size = plt.subplots(figsize=(10, 5))
-                fig_size.patch.set_facecolor(bg_color)
-                
-                line_styles = ['-', '--', ':', '-.']
                 bins = np.arange(0, max_x_size + size_bin_width, size_bin_width)
                 x_vals = np.linspace(0, max_x_size, 500)
+                line_styles = ['-', '--', ':', '-.']
                 
-                drawn_any = False
+                entities = []
                 for ch in active_channels:
                     active_items = [i for i in processed_data['Size'][ch] if i['active']]
                     if not active_items: continue
-                    drawn_any = True
                     
                     if rep_mode == "Pool Data":
                         combined_df = pd.concat([i['df'] for i in active_items], ignore_index=True)
-                        feature_col = find_data_column(combined_df, ['particle size', 'size', 'diameter'])
-                        if feature_col:
-                            plot_custom_distribution(ax_size, combined_df, feature_col, bins, x_vals, size_bin_width, 
-                                                     active_items[0]['color'], '-', line_width, f"{ch} (Pooled)", display_style)
-                            if central_marker != "None":
-                                plot_central_marker(ax_size, combined_df[feature_col].dropna(), active_items[0]['color'], central_marker)
+                        f_col = find_data_column(combined_df, ['particle size', 'size', 'diameter'])
+                        if f_col:
+                            entities.append({"label": f"{ch} (Pooled)", "data": combined_df[f_col].dropna(), "color": active_items[0]['color'], "style": '-'})
                     else:
                         for idx, item in enumerate(active_items):
-                            feature_col = find_data_column(item['df'], ['particle size', 'size', 'diameter'])
+                            f_col = find_data_column(item['df'], ['particle size', 'size', 'diameter'])
                             style = '-' if force_solid else line_styles[idx % len(line_styles)]
-                            if feature_col:
-                                plot_custom_distribution(ax_size, item['df'], feature_col, bins, x_vals, size_bin_width, 
-                                                         item['color'], style, line_width, item['label'], display_style)
-                                if central_marker != "None":
-                                    plot_central_marker(ax_size, item['df'][feature_col].dropna(), item['color'], central_marker)
+                            if f_col:
+                                entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "color": item['color'], "style": style})
+
+                if entities and palette_choice != "Custom (Sample Colors)":
+                    hex_colors = sns.color_palette(PALETTES[palette_choice], len(entities)).as_hex()
+                    for i, ent in enumerate(entities): ent["color"] = hex_colors[i]
+
+                if not entities:
+                    st.info("No active data to plot.")
+                else:
+                    if multi_layout == "Overlay (Default)":
+                        fig, ax = plt.subplots(figsize=(10, 5))
+                        fig.patch.set_facecolor(bg_color)
+                        for ent in entities:
+                            tmp_df = pd.DataFrame({'val': ent['data']})
+                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
+                        apply_custom_style(ax, "Size Distribution", "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=show_legend)
+                        st.pyplot(fig)
+                        create_download_buttons(fig, "Size_Distribution")
+
+                    elif multi_layout == "Facet Grid":
+                        cols = 2
+                        rows = math.ceil(len(entities) / cols)
+                        if rows == 0: rows = 1
+                        fig, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
+                        fig.patch.set_facecolor(bg_color)
+                        
+                        for i, ent in enumerate(entities):
+                            ax = axes[i // cols, i % cols]
+                            tmp_df = pd.DataFrame({'val': ent['data']})
+                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
+                            apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
+                            
+                        for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        create_download_buttons(fig, "Size_Distribution")
+
+                    elif multi_layout == "Ridgeline (Joyplot)":
+                        fig, ax = plt.subplots(figsize=(10, max(5, len(entities) * 0.85)))
+                        fig.patch.set_facecolor(bg_color)
+                        ax.set_facecolor(bg_color)
+                        
+                        max_h = 0
+                        kdes = []
+                        for ent in entities:
+                            if len(ent['data']) > 1:
+                                y_c = gaussian_kde(ent['data'])(x_vals) * len(ent['data']) * size_bin_width
+                                max_h = max(max_h, max(y_c))
+                                kdes.append((y_c, ent))
+                            else:
+                                kdes.append((None, ent))
                                 
-                apply_custom_style(ax_size, "Size Distribution", "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=(drawn_any and show_legend))
-                st.pyplot(fig_size)
+                        offset_step = max_h * 0.4 if max_h > 0 else 1 
+                        y_ticks, y_labels = [], []
+                        
+                        for i, (y_c, ent) in enumerate(reversed(kdes)):
+                            current_offset = i * offset_step
+                            if y_c is not None:
+                                ax.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
+                                ax.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
+                                if central_marker != "None":
+                                    val = np.nan
+                                    if central_marker == "Median": val = ent['data'].median()
+                                    elif central_marker == "Mode": val = get_mode_from_kde(ent['data'])
+                                    elif central_marker == "Mean": val = ent['data'].mean()
+                                    if pd.notna(val):
+                                        ax.vlines(val, current_offset, current_offset + max(y_c), color=ent['color'], linestyle=':', lw=1.5, alpha=0.8)
+                                        
+                            ax.axhline(current_offset, color=axes_color, lw=0.5, alpha=0.4)
+                            y_ticks.append(current_offset)
+                            y_labels.append(ent['label'])
+                            
+                        ax.set_yticks(y_ticks)
+                        ax.set_yticklabels(y_labels, color=axes_color)
+                        apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
+                        st.pyplot(fig)
+                        create_download_buttons(fig, "Size_Distribution")
 
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Size)")
-            
-            entities = []
-            if rep_mode == "Pool Data":
-                for ch in active_channels:
-                    active_items = [i for i in processed_data['Size'][ch] if i['active']]
-                    if not active_items: continue
-                    combined_df = pd.concat([i['df'] for i in active_items], ignore_index=True)
-                    f_col = find_data_column(combined_df, ['particle size', 'size', 'diameter'])
-                    if f_col:
-                        entities.append({"label": f"{ch} (Pooled)", "data": combined_df[f_col].dropna()})
-            else:
-                for ch in active_channels:
-                    active_items = [i for i in processed_data['Size'][ch] if i['active']]
-                    for item in active_items:
-                        f_col = find_data_column(item['df'], ['particle size', 'size', 'diameter'])
-                        if f_col:
-                            entities.append({"label": f"[{ch}] {item['label']}", "data": item['df'][f_col].dropna()})
-            
             if entities:
                 summary_list = []
                 for ent in entities:
                     d = ent["data"]
-                    summary_list.append({
-                        "Sample": ent["label"],
-                        "Count": len(d),
-                        "Mean (nm)": round(d.mean(), 1),
-                        "Median (nm)": round(d.median(), 1),
-                        "Mode (nm)": round(get_mode_from_kde(d), 1),
-                        "SD (nm)": round(d.std(), 1)
-                    })
+                    summary_list.append({"Sample": ent["label"], "Count": len(d), "Mean (nm)": round(d.mean(), 1), "Median (nm)": round(d.median(), 1), "Mode (nm)": round(get_mode_from_kde(d), 1), "SD (nm)": round(d.std(), 1)})
                 st.dataframe(pd.DataFrame(summary_list), use_container_width=True)
                 
-                if len(entities) > 1 and stats_tests:
+                if len(entities) > 1:
                     st.info("""
                     **📚 Understanding the Statistical Tests:**
                     * **Mann-Whitney U:** Gives a p-value for the shift in the median.
@@ -323,8 +436,7 @@ else:
                     pairwise_list = []
                     for ent_a, ent_b in itertools.combinations(entities, 2):
                         row_data = {"Sample A": ent_a["label"], "Sample B": ent_b["label"]}
-                        stat_results = run_stats_comparisons(ent_a["data"], ent_b["data"], stats_tests)
-                        row_data.update(stat_results)
+                        row_data.update(run_stats_comparisons(ent_a["data"], ent_b["data"]))
                         pairwise_list.append(row_data)
                     st.dataframe(pd.DataFrame(pairwise_list), use_container_width=True)
 
@@ -333,8 +445,6 @@ else:
     # ==========================================
     with tab2:
         st.header("Zeta Potential Histogram")
-        st.info("💡 **Statistical Note:** The Mean is the standard measurement for charge distributions. **Also, this tab is designed to compare different channels from the *same* sample.** If you upload multiple independent samples, the analysis will pool them together.")
-
         if not processed_data['Zeta_Potential']:
             st.warning("No 'Zeta_Potential' measurement files detected.")
         else:
@@ -352,75 +462,182 @@ else:
                 if has_replicates_zeta:
                     st.info("Multiple active samples detected in the same channel.")
                     rep_mode_zeta = st.radio("Multi-Sample Handling:", ["Treat Independent", "Pool Data"], key="z_repmode")
+                    
+                st.markdown("---")
+                show_marginal = st.checkbox("Show Size vs. Zeta Scatter Plot (Marginal Distributions)", value=False)
+                if show_marginal:
+                    bubble_mode = st.checkbox("Bubble Chart (3rd Variable)", value=False)
+                    if not bubble_mode:
+                        scatter_dot_size = st.slider("Scatter Dot Size", min_value=5, max_value=200, value=50, step=5)
+                    else:
+                        scatter_dot_size = 50 # Fallback
                 
             with col4:
-                fig_zeta, ax_zeta = plt.subplots(figsize=(10, 5))
-                fig_zeta.patch.set_facecolor(bg_color)
-                
                 bins = np.arange(min_x_zeta, max_x_zeta + zeta_bin_width, zeta_bin_width)
                 x_vals = np.linspace(min_x_zeta, max_x_zeta, 500)
                 line_styles = ['-', '--', ':', '-.']
                 
-                drawn_zeta = False
+                z_entities = []
                 for ch in active_zeta_channels:
                     active_items = [i for i in processed_data['Zeta_Potential'][ch] if i['active']]
                     if not active_items: continue
-                    drawn_zeta = True
                     
                     if rep_mode_zeta == "Pool Data":
                         combined_df = pd.concat([i['df'] for i in active_items], ignore_index=True)
-                        feature_col = find_data_column(combined_df, ['zeta potential'])
-                        if feature_col:
-                            plot_custom_distribution(ax_zeta, combined_df, feature_col, bins, x_vals, zeta_bin_width, 
-                                                     active_items[0]['color'], '-', line_width, f"{ch} (Pooled)", display_style)
-                            if central_marker != "None":
-                                plot_central_marker(ax_zeta, combined_df[feature_col].dropna(), active_items[0]['color'], central_marker)
+                        f_col = find_data_column(combined_df, ['zeta potential'])
+                        if f_col:
+                            z_entities.append({"label": f"{ch} (Pooled)", "data": combined_df[f_col].dropna(), "df": combined_df, "color": active_items[0]['color'], "style": '-'})
                     else:
                         for idx, item in enumerate(active_items):
-                            feature_col = find_data_column(item['df'], ['zeta potential'])
+                            f_col = find_data_column(item['df'], ['zeta potential'])
                             style = '-' if force_solid else line_styles[idx % len(line_styles)]
-                            if feature_col:
-                                plot_custom_distribution(ax_zeta, item['df'], feature_col, bins, x_vals, zeta_bin_width, 
-                                                         item['color'], style, line_width, item['label'], display_style)
+                            if f_col:
+                                z_entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "df": item['df'], "color": item['color'], "style": style})
+
+                if z_entities and palette_choice != "Custom (Sample Colors)":
+                    hex_colors = sns.color_palette(PALETTES[palette_choice], len(z_entities)).as_hex()
+                    for i, ent in enumerate(z_entities): ent["color"] = hex_colors[i]
+
+                if not z_entities:
+                    st.info("No active data to plot.")
+                else:
+                    if multi_layout == "Overlay (Default)":
+                        fig_zeta, ax_zeta = plt.subplots(figsize=(10, 5))
+                        fig_zeta.patch.set_facecolor(bg_color)
+                        for ent in z_entities:
+                            tmp_df = pd.DataFrame({'val': ent['data']})
+                            plot_custom_distribution(ax_zeta, tmp_df, 'val', bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            if central_marker != "None": plot_central_marker(ax_zeta, ent['data'], ent['color'], central_marker)
+                        apply_custom_style(ax_zeta, "Zeta Potential Distribution", "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=show_legend)
+                        st.pyplot(fig_zeta)
+                        create_download_buttons(fig_zeta, "Zeta_Potential_Histogram")
+
+                    elif multi_layout == "Facet Grid":
+                        cols = 2
+                        rows = math.ceil(len(z_entities) / cols)
+                        if rows == 0: rows = 1
+                        fig_zeta, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
+                        fig_zeta.patch.set_facecolor(bg_color)
+                        for i, ent in enumerate(z_entities):
+                            ax = axes[i // cols, i % cols]
+                            tmp_df = pd.DataFrame({'val': ent['data']})
+                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
+                            apply_custom_style(ax, ent['label'], "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=False)
+                        for j in range(len(z_entities), rows * cols): fig_zeta.delaxes(axes.flatten()[j])
+                        plt.tight_layout()
+                        st.pyplot(fig_zeta)
+                        create_download_buttons(fig_zeta, "Zeta_Potential_Histogram")
+                        
+                    elif multi_layout == "Ridgeline (Joyplot)":
+                        fig_zeta, ax_zeta = plt.subplots(figsize=(10, max(5, len(z_entities) * 0.85)))
+                        fig_zeta.patch.set_facecolor(bg_color)
+                        ax_zeta.set_facecolor(bg_color)
+                        
+                        max_h = 0
+                        kdes = []
+                        for ent in z_entities:
+                            if len(ent['data']) > 1:
+                                y_c = gaussian_kde(ent['data'])(x_vals) * len(ent['data']) * zeta_bin_width
+                                max_h = max(max_h, max(y_c))
+                                kdes.append((y_c, ent))
+                            else:
+                                kdes.append((None, ent))
+                                
+                        offset_step = max_h * 0.4 if max_h > 0 else 1
+                        y_ticks, y_labels = [], []
+                        
+                        for i, (y_c, ent) in enumerate(reversed(kdes)):
+                            current_offset = i * offset_step
+                            if y_c is not None:
+                                ax_zeta.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
+                                ax_zeta.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
                                 if central_marker != "None":
-                                    plot_central_marker(ax_zeta, item['df'][feature_col].dropna(), item['color'], central_marker)
-                
-                apply_custom_style(ax_zeta, "Zeta Potential Distribution", "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=(drawn_zeta and show_legend))
-                st.pyplot(fig_zeta)
+                                    val = np.nan
+                                    if central_marker == "Median": val = ent['data'].median()
+                                    elif central_marker == "Mode": val = get_mode_from_kde(ent['data'])
+                                    elif central_marker == "Mean": val = ent['data'].mean()
+                                    if pd.notna(val):
+                                        ax_zeta.vlines(val, current_offset, current_offset + max(y_c), color=ent['color'], linestyle=':', lw=1.5, alpha=0.8)
+                            ax_zeta.axhline(current_offset, color=axes_color, lw=0.5, alpha=0.4)
+                            y_ticks.append(current_offset)
+                            y_labels.append(ent['label'])
+                            
+                        ax_zeta.set_yticks(y_ticks)
+                        ax_zeta.set_yticklabels(y_labels, color=axes_color)
+                        apply_custom_style(ax_zeta, "Ridgeline Zeta Comparison", "Zeta Potential (mV)", "", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=False)
+                        st.pyplot(fig_zeta)
+                        create_download_buttons(fig_zeta, "Zeta_Potential_Histogram")
+
+                # --- Marginal Scatter Plot Logic ---
+                if show_marginal and z_entities:
+                    st.markdown("### Size vs. Zeta Potential Scatter Plot")
+                    combined_marg_df = pd.DataFrame()
+                    palette_dict = {}
+                    
+                    for ent in z_entities:
+                        temp_df = ent['df'].copy()
+                        temp_df['Sample'] = ent['label']
+                        palette_dict[ent['label']] = ent['color']
+                        combined_marg_df = pd.concat([combined_marg_df, temp_df], ignore_index=True)
+                        
+                    s_col = find_data_column(combined_marg_df, ['particle size', 'size', 'diameter'])
+                    z_col = find_data_column(combined_marg_df, ['zeta potential'])
+                    
+                    if s_col and z_col:
+                        if bubble_mode:
+                            # Automatically find remaining numeric columns
+                            numeric_cols = combined_marg_df.select_dtypes(include=[np.number]).columns.tolist()
+                            valid_bubble_cols = [c for c in numeric_cols if c.lower() not in [s_col.lower(), z_col.lower(), 'channel']]
+                            
+                            if valid_bubble_cols:
+                                bubble_col = st.selectbox("Select Variable for Bubble Size:", valid_bubble_cols)
+                                jg = sns.jointplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, alpha=0.5, marginal_kws=dict(fill=True), joint_kws={'size': combined_marg_df[bubble_col], 'sizes': (20, 500)})
+                            else:
+                                st.warning("No suitable 3rd numeric variable found.")
+                                jg = sns.jointplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, alpha=0.6, marginal_kws=dict(fill=True), joint_kws={'s': scatter_dot_size})
+                        else:
+                            jg = sns.jointplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, alpha=0.6, marginal_kws=dict(fill=True), joint_kws={'s': scatter_dot_size})
+                            
+                        jg.fig.patch.set_facecolor(bg_color)
+                        jg.ax_joint.set_facecolor(bg_color)
+                        jg.ax_marg_x.set_facecolor(bg_color)
+                        jg.ax_marg_y.set_facecolor(bg_color)
+                        
+                        jg.ax_joint.set_xlabel("Hydrodynamic Diameter (nm)", color=axes_color, fontsize=label_size)
+                        jg.ax_joint.set_ylabel("Zeta Potential (mV)", color=axes_color, fontsize=label_size)
+                        jg.ax_joint.tick_params(colors=axes_color, labelsize=label_size, width=axes_width)
+                        for spine in jg.ax_joint.spines.values(): 
+                            spine.set_color(axes_color)
+                            spine.set_linewidth(axes_width)
+                        if show_grid: jg.ax_joint.grid(True, linestyle='--', linewidth=0.5, alpha=0.3, color=axes_color)
+                        
+                        if show_legend and jg.ax_joint.get_legend():
+                            leg = jg.ax_joint.get_legend()
+                            for text in leg.get_texts(): 
+                                text.set_color(axes_color)
+                                text.set_fontsize(legend_size)
+                            if leg.get_title():
+                                leg.get_title().set_color(axes_color)
+                                leg.get_title().set_fontsize(legend_size)
+                            leg.get_frame().set_facecolor(bg_color)
+                            leg.get_frame().set_edgecolor(axes_color)
+                            
+                        elif not show_legend and jg.ax_joint.get_legend():
+                            jg.ax_joint.get_legend().remove()
+
+                        st.pyplot(jg.fig)
+                        create_download_buttons(jg.fig, "Size_vs_Zeta_Scatter")
+                    else:
+                        st.error("Could not find both Size and Zeta Potential columns in the selected files to create the scatter plot.")
 
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Zeta Potential)")
-            
-            zeta_entities = []
-            if rep_mode_zeta == "Pool Data":
-                for ch in active_zeta_channels:
-                    active_items = [i for i in processed_data['Zeta_Potential'][ch] if i['active']]
-                    if not active_items: continue
-                    combined_df = pd.concat([i['df'] for i in active_items], ignore_index=True)
-                    f_col = find_data_column(combined_df, ['zeta potential'])
-                    if f_col:
-                        zeta_entities.append({"label": f"{ch} (Pooled)", "data": combined_df[f_col].dropna()})
-            else:
-                for ch in active_zeta_channels:
-                    active_items = [i for i in processed_data['Zeta_Potential'][ch] if i['active']]
-                    for item in active_items:
-                        f_col = find_data_column(item['df'], ['zeta potential'])
-                        if f_col:
-                            zeta_entities.append({"label": f"[{ch}] {item['label']}", "data": item['df'][f_col].dropna()})
-            
-            if zeta_entities:
-                summary_list = []
-                for ent in zeta_entities:
-                    d = ent["data"]
-                    summary_list.append({
-                        "Sample": ent["label"],
-                        "Count": len(d),
-                        "Mean (mV)": round(d.mean(), 1),
-                        "SD (mV)": round(d.std(), 1)
-                    })
+            if z_entities:
+                summary_list = [{"Sample": ent["label"], "Count": len(ent["data"]), "Mean (mV)": round(ent["data"].mean(), 1), "SD (mV)": round(ent["data"].std(), 1)} for ent in z_entities]
                 st.dataframe(pd.DataFrame(summary_list), use_container_width=True)
                 
-                if len(zeta_entities) > 1 and stats_tests:
+                if len(z_entities) > 1:
                     st.info("""
                     **📚 Understanding the Statistical Tests:**
                     * **Mann-Whitney U:** Gives a p-value for the shift in the median.
@@ -429,10 +646,9 @@ else:
                     """)
                     st.markdown("*All-vs-All Pairwise Comparisons*")
                     pairwise_list = []
-                    for ent_a, ent_b in itertools.combinations(zeta_entities, 2):
+                    for ent_a, ent_b in itertools.combinations(z_entities, 2):
                         row_data = {"Sample A": ent_a["label"], "Sample B": ent_b["label"]}
-                        stat_results = run_stats_comparisons(ent_a["data"], ent_b["data"], stats_tests)
-                        row_data.update(stat_results)
+                        row_data.update(run_stats_comparisons(ent_a["data"], ent_b["data"]))
                         pairwise_list.append(row_data)
                     st.dataframe(pd.DataFrame(pairwise_list), use_container_width=True)
 
@@ -441,11 +657,7 @@ else:
     # ==========================================
     with tab3:
         st.header("Concentration Analysis")
-        st.info("""
-        💡 **Note:** Concentration is a single absolute bulk value per scan. To generate **Standard Deviation Error Bars**, simply assign the exact same 'Label' to your biological replicates in the Customize menu above! 
-        
-        **The dilution factor (df) can typically be found at the end of the sample's original folder name (e.g., _df250000).**
-        """)
+        st.info("💡 **Note:** The dilution factor (df) can typically be found at the end of the sample's original folder name (e.g., _df250000).")
         
         if not processed_data.get('Concentration'):
             st.warning("No 'Concentration' measurement files detected.")
@@ -455,15 +667,14 @@ else:
             
             col_c1, col_c2 = st.columns([1, 3])
             with col_c1:
-                machine_vol = st.number_input("Machine Scanned Volume (mL)", value=1.0e-8, format="%.2e", help="The physical volume scanned by the laser. Used to calculate particles/mL from the raw particle count.")
+                fig_width = st.slider("Figure Width", min_value=3.0, max_value=15.0, value=6.0, step=0.5, help="Reduce this value to make the graph squarer when you have very few samples.")
+                bar_width = st.slider("Bar/Box Width", min_value=0.1, max_value=1.0, value=0.8, step=0.1, help="Adjust the thickness of the individual bars or boxes.")
                 st.markdown("---")
-                
                 st.markdown("### 💧 Set Dilution Factors")
                 for ch in active_conc_channels:
                     for item in processed_data['Concentration'][ch]:
                         if item['active']:
                             item['dilution'] = st.number_input(f"{item['label']} ({ch})", value=item.get('dilution', 1.0), format="%.1e", key=f"dil_tab3_{item['filename']}_{ch}")
-                
                 st.markdown("---")
                 graph_type = st.radio("Graph Style", ["Bar Chart", "Dot Plot (Strip)", "Box Plot"])
                 grouping = st.radio("Group By (X-Axis)", ["Channel (Compare Samples)", "Sample (Compare Channels)"])
@@ -471,71 +682,45 @@ else:
             with col_c2:
                 conc_data = []
                 palette_dict = {}
-                
                 for ch in active_conc_channels:
                     active_items = [i for i in processed_data['Concentration'][ch] if i['active']]
                     for item in active_items:
-                        c_val = (len(item['df']) / machine_vol) * item['dilution']
-                        conc_data.append({
-                            'Channel': ch,
-                            'Sample Label': item['label'],
-                            'Concentration (particles/mL)': c_val,
-                            'Color': item['color']
-                        })
-                        
-                        if grouping == "Sample (Compare Channels)":
-                            palette_dict[ch] = item['color']
-                        else:
-                            palette_dict[item['label']] = item['color']
+                        c_val = len(item['df']) * item['dilution']
+                        conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': c_val, 'Color': item['color']})
+                        palette_dict[ch if grouping == "Sample (Compare Channels)" else item['label']] = item['color']
                             
                 if conc_data:
                     df_conc = pd.DataFrame(conc_data)
-                    
-                    fig_conc, ax_conc = plt.subplots(figsize=(10, 5))
+                    fig_conc, ax_conc = plt.subplots(figsize=(fig_width, 5))
                     fig_conc.patch.set_facecolor(bg_color)
                     ax_conc.set_facecolor(bg_color)
                     
                     x_col = 'Channel' if grouping == "Channel (Compare Samples)" else 'Sample Label'
                     hue_col = 'Sample Label' if grouping == "Channel (Compare Samples)" else 'Channel'
                     
-                    if graph_type == "Bar Chart":
-                        sns.barplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=palette_dict, errorbar='sd', capsize=0.1, ax=ax_conc, edgecolor=axes_color)
-                    elif graph_type == "Dot Plot (Strip)":
-                        sns.stripplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=palette_dict, dodge=True, size=8, ax=ax_conc, edgecolor=axes_color, linewidth=1)
-                    elif graph_type == "Box Plot":
-                        sns.boxplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=palette_dict, ax=ax_conc, fliersize=5)
+                    active_palette = palette_dict if palette_choice == "Custom (Sample Colors)" else PALETTES[palette_choice]
                     
-                    ax_conc.set_title("Total Particle Concentration", color=axes_color)
-                    ax_conc.set_xlabel(x_col, color=axes_color)
-                    ax_conc.set_ylabel("Concentration (particles/mL)", color=axes_color)
-                    ax_conc.tick_params(colors=axes_color)
-                    for spine in ax_conc.spines.values(): spine.set_color(axes_color)
-                    if show_grid: ax_conc.grid(True, linestyle='--', linewidth=0.5, alpha=0.3, color=axes_color)
+                    if graph_type == "Bar Chart": sns.barplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, errorbar='sd', capsize=0.1, ax=ax_conc, edgecolor=axes_color, linewidth=line_width, width=bar_width)
+                    elif graph_type == "Dot Plot (Strip)": sns.stripplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, dodge=True, size=8, ax=ax_conc, edgecolor=axes_color, linewidth=line_width/2)
+                    elif graph_type == "Box Plot": sns.boxplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, ax=ax_conc, fliersize=5, linewidth=line_width, width=bar_width)
                     
-                    if show_legend:
-                        leg = ax_conc.legend(title=hue_col)
-                        if leg is not None:
-                            for text in leg.get_texts(): text.set_color(axes_color)
-                            if leg.get_title(): leg.get_title().set_color(axes_color)
-                            leg.get_frame().set_facecolor(bg_color)
-                            leg.get_frame().set_edgecolor(axes_color)
-                    else:
-                        if ax_conc.get_legend(): ax_conc.get_legend().remove()
-                        
+                    apply_custom_style(ax_conc, "Total Particle Concentration", x_col, "Concentration (particles/mL)", None, bg_color, axes_color, show_grid, draw_legend=show_legend)
+                    
+                    # Ensure the legend title (Channel vs Sample) matches the styling
+                    if show_legend and ax_conc.get_legend():
+                        leg = ax_conc.get_legend()
+                        leg.set_title(hue_col)
+                        leg.get_title().set_color(axes_color)
+                        leg.get_title().set_fontsize(legend_size)
                     st.pyplot(fig_conc)
+                    create_download_buttons(fig_conc, "Concentration_Plot")
 
             st.markdown("---")
             st.subheader("📊 Concentration Data")
             if conc_data:
-                df_summary = df_conc.groupby(['Channel', 'Sample Label']).agg(
-                    Replicates=('Concentration (particles/mL)', 'count'),
-                    Mean_Concentration=('Concentration (particles/mL)', 'mean'),
-                    SD_Concentration=('Concentration (particles/mL)', 'std')
-                ).reset_index()
-                
+                df_summary = df_conc.groupby(['Channel', 'Sample Label']).agg(Replicates=('Concentration (particles/mL)', 'count'), Mean_Concentration=('Concentration (particles/mL)', 'mean'), SD_Concentration=('Concentration (particles/mL)', 'std')).reset_index()
                 df_summary['Mean_Concentration'] = df_summary['Mean_Concentration'].apply(lambda x: f"{x:.2e}")
                 df_summary['SD_Concentration'] = df_summary['SD_Concentration'].fillna(0).apply(lambda x: f"{x:.2e}")
-                
                 st.dataframe(df_summary, use_container_width=True)
 
     # ==========================================
@@ -543,7 +728,7 @@ else:
     # ==========================================
     with tab4:
         st.header("Advanced Population Analysis")
-        st.markdown("This module calculates GMM sub-populations, stats, and positivity rates for activated channels. (Active files in the same channel are pooled).")
+        st.markdown("This module calculates GMM sub-populations, stats, and positivity rates for activated channels.")
         
         if not processed_data['Size']:
             st.warning("No 'Size' measurement files detected.")
@@ -592,7 +777,6 @@ else:
                             
                         best_n = np.argmin(bic_scores) + 1
                         df_clean['Population'] = models[best_n - 1].predict(X_log) + 1
-                        
                         total_particles = len(df_clean)
                         
                         summary = df_clean.groupby('Population')[feature_col].agg(Mean='mean', Median=np.median, Mode=get_mode_from_kde, SD='std', Count='count')
@@ -603,7 +787,6 @@ else:
                         summary['Mode (nm)'] = summary['Mode'].round(1)
                         summary['SD (nm)'] = summary['SD'].round(1)
                         summary = summary.drop(columns=['Mean', 'Median', 'Mode', 'SD']).reset_index()
-                        
                         summary.insert(0, 'Channel', ch)
                         
                         gmm_results[ch] = {
@@ -615,34 +798,28 @@ else:
                     if not gmm_results:
                         st.warning("No active valid particles found for selected channels.")
                     else:
+                        if palette_choice != "Custom (Sample Colors)" and gmm_results:
+                            hex_colors = sns.color_palette(PALETTES[palette_choice], len(gmm_results)).as_hex()
+                            for i, ch in enumerate(gmm_results.keys()):
+                                gmm_results[ch]['color'] = hex_colors[i]
+
                         global_stats_list = []
-                        
-                        scatter_data = None
-                        if 'Scatter' in gmm_results:
-                            scatter_data = gmm_results['Scatter']['df'][gmm_results['Scatter']['feature_col']].dropna()
+                        scatter_data = gmm_results['Scatter']['df'][gmm_results['Scatter']['feature_col']].dropna() if 'Scatter' in gmm_results else None
                         
                         for ch, res in gmm_results.items():
                             f_col = res['feature_col']
                             ch_data = res['df'][f_col].dropna()
                             ch_count = len(ch_data)
                             ch_median = ch_data.median()
-                            
                             pos_rate_str = "N/A"
                             stat_results = {}
                             
                             if ch != 'Scatter' and scatter_data is not None:
                                 pos_rate = (ch_count / len(scatter_data)) * 100
                                 pos_rate_str = f"{pos_rate:.1f}%*"
-                                
-                                if stats_tests:
-                                    stat_results = run_stats_comparisons(scatter_data, ch_data, stats_tests)
+                                stat_results = run_stats_comparisons(scatter_data, ch_data)
                             
-                            global_row = {
-                                'Channel': ch, 
-                                'Total Particle Count': ch_count, 
-                                'Global Median Size (nm)': round(ch_median, 2), 
-                                'Positivity Rate': pos_rate_str
-                            }
+                            global_row = {'Channel': ch, 'Total Particle Count': ch_count, 'Global Median Size (nm)': round(ch_median, 2), 'Positivity Rate': pos_rate_str}
                             global_row.update(stat_results)
                             global_stats_list.append(global_row)
                         
@@ -655,39 +832,24 @@ else:
                             st.markdown(f"**{ch} Channel Breakdown:**")
                             st.dataframe(gmm_results[ch]['summary'], use_container_width=True)
                         
-                        min_val_ext = 0
-                        max_val_ext = gmm_x_max
+                        min_val_ext, max_val_ext = 0, gmm_x_max
                         x_vals_ext = np.linspace(min_val_ext, max_val_ext, 500)
                         master_curves = pd.DataFrame({'Hydrodynamic Diameter (nm)': x_vals_ext})
-                        
                         bins_ext = np.arange(min_val_ext, max_val_ext + gmm_bin_width, gmm_bin_width)
                         master_hists = pd.DataFrame({'Bin_Start (nm)': bins_ext[:-1], 'Bin_End (nm)': bins_ext[1:]})
                         
                         for ch, res in gmm_results.items():
-                            df_ch = res['df']
-                            f_col = res['feature_col']
-                            best_n = res['best_n']
-                            
-                            if len(df_ch) > 1:
-                                kde_total = gaussian_kde(df_ch[f_col])
-                                master_curves[f'{ch}_Total_Density'] = kde_total(x_vals_ext) * len(df_ch)
-                                
-                            counts_total, _ = np.histogram(df_ch[f_col], bins=bins_ext)
-                            master_hists[f'{ch}_Total_Count'] = counts_total
-                            
+                            df_ch, f_col, best_n = res['df'], res['feature_col'], res['best_n']
+                            if len(df_ch) > 1: master_curves[f'{ch}_Total_Density'] = gaussian_kde(df_ch[f_col])(x_vals_ext) * len(df_ch)
+                            master_hists[f'{ch}_Total_Count'], _ = np.histogram(df_ch[f_col], bins=bins_ext)
                             for pop in range(1, best_n + 1):
                                 pop_data = df_ch[df_ch['Population'] == pop][f_col]
-                                if len(pop_data) > 1:
-                                    kde_pop = gaussian_kde(pop_data)
-                                    master_curves[f'{ch}_Pop_{pop}_Density'] = kde_pop(x_vals_ext) * len(pop_data)
+                                if len(pop_data) > 1: master_curves[f'{ch}_Pop_{pop}_Density'] = gaussian_kde(pop_data)(x_vals_ext) * len(pop_data)
                                 counts_pop, _ = np.histogram(pop_data, bins=bins_ext)
                                 master_hists[f'{ch}_Pop_{pop}_Count'] = counts_pop
 
                         first_ch = list(gmm_results.keys())[0]
-                        first_filename = gmm_results[first_ch]['filenames'][0]
-                        base_name_export = first_filename.replace('.zip', '')
-                        dynamic_excel_name = f"{base_name_export}_Population_Analysis.xlsx"
-
+                        dynamic_excel_name = f"{gmm_results[first_ch]['filenames'][0].replace('.zip', '')}_Population_Analysis.xlsx"
                         excel_buffer = io.BytesIO()
                         with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                             pd.concat([pd.DataFrame(global_stats_list), pd.DataFrame({'Channel': ['*Positivity result not based on colocalization analysis']})], ignore_index=True).to_excel(writer, sheet_name='1_Global_Stats', index=False)
@@ -702,39 +864,32 @@ else:
                         total_rows = 1 + num_channels if num_channels > 1 else 1
                         fig_gmm = plt.figure(figsize=(14, 5 * total_rows))
                         fig_gmm.patch.set_facecolor(bg_color)
-                        bins = np.arange(0, gmm_x_max + gmm_bin_width, gmm_bin_width)
-                        x_vals = np.linspace(0, gmm_x_max, 500)
-
+                        
                         if num_channels == 1:
                             ax1, ax2 = plt.subplot(1, 2, 1), plt.subplot(1, 2, 2)
                             ch, res = list(gmm_results.items())[0]
                             ax1.plot(range(1, max_pops + 1), res['bic'], marker='o', linestyle='-', color=res['color'])
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
-                            
-                            f_col = res['feature_col']
-                            sns.histplot(data=res['df'], x=f_col, hue='Population', palette='viridis', element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, ax=ax2)
+                            sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette='viridis', element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
                             apply_custom_style(ax2, f"{ch} Particles Grouped into {res['best_n']} Populations", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
-                        
                         else:
                             ax1, ax2 = plt.subplot(total_rows, 2, 1), plt.subplot(total_rows, 2, 2)
                             for ch, res in gmm_results.items():
                                 c = res['color']
                                 ax1.plot(range(1, max_pops + 1), res['bic'], marker='o', linestyle='-', color=c, label=ch)
-                                plot_custom_distribution(ax2, res['df'], res['feature_col'], bins, x_vals, gmm_bin_width, c, '-', line_width, ch, display_style)
-                            
+                                plot_custom_distribution(ax2, res['df'], res['feature_col'], bins_ext, x_vals_ext, gmm_bin_width, c, '-', line_width, ch, display_style)
                             ax1.set_xticks(range(1, max_pops + 1)) 
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=show_legend)
                             apply_custom_style(ax2, "Multi-Channel Size Distribution Overlay", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
-                            
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = plt.subplot(total_rows, 1, i + 2)
-                                f_col = res['feature_col']
-                                sns.histplot(data=res['df'], x=f_col, hue='Population', palette='viridis', element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, ax=ax_sub)
+                                sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette='viridis', element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax_sub)
                                 apply_custom_style(ax_sub, f"Sub-population Breakdown: {ch} ({res['best_n']} Populations Found)", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
 
                         plt.tight_layout()
                         st.pyplot(fig_gmm)
+                        create_download_buttons(fig_gmm, "GMM_Population_Analysis")
                         
                         st.download_button(
                             label="📥 Download Excel Statistics Data",
@@ -743,3 +898,96 @@ else:
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True
                         )
+
+    # ==========================================
+    # TAB 5: COLOCALIZATION
+    # ==========================================
+    with tab5:
+        st.header("Colocalization Analysis")
+        
+        if not processed_data.get('Colocalization'):
+            st.warning("No 'Colocalization' measurement files detected.")
+        else:
+            st.info("💡 **Note:** Pie charts display the percentage of unique particles colocalized versus particles detected strictly in a single channel.")
+            
+            active_coloc_items = []
+            for ch, items in processed_data['Colocalization'].items():
+                for item in items:
+                    if item['active']:
+                        active_coloc_items.append((ch, item))
+            
+            if not active_coloc_items:
+                st.info("No active Colocalization data to plot.")
+            else:
+                coloc_summary = []
+                cols = st.columns(3)
+                
+                for idx, (ch_group, item) in enumerate(active_coloc_items):
+                    df = item['df']
+                    ch_col = find_data_column(df, ['channel'])
+                    coloc_col = find_data_column(df, ['colocalised', 'colocalized'])
+                    
+                    if ch_col and coloc_col:
+                        name_lower = item['filename'].lower()
+                        found = []
+                        for code, (c_name, color) in DEFAULT_CHANNELS.items():
+                            id_pos = name_lower.find(code.lower())
+                            if id_pos != -1: found.append((id_pos, c_name, color))
+                        found.sort()
+                        
+                        ch1_name = found[0][1] if len(found) >= 1 else "Channel 1"
+                        ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
+                        ch1_color = found[0][2] if len(found) >= 1 else "#0000FF"
+                        ch2_color = found[1][2] if len(found) >= 2 else "#008000"
+                        coloc_color = "#FFD700" 
+                        
+                        is_coloc = df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0'])
+                        
+                        unique_chs = df[ch_col].dropna().unique()
+                        ch1_val = unique_chs[0] if len(unique_chs) > 0 else 1
+                        ch2_val = unique_chs[1] if len(unique_chs) > 1 else 2
+                        
+                        ch1_mask = df[ch_col] == ch1_val
+                        ch2_mask = df[ch_col] == ch2_val
+                        
+                        coloc_events = max(df[is_coloc & ch1_mask].shape[0], df[is_coloc & ch2_mask].shape[0])
+                        ch1_only = df[~is_coloc & ch1_mask].shape[0]
+                        ch2_only = df[~is_coloc & ch2_mask].shape[0]
+                        
+                        total_unique = coloc_events + ch1_only + ch2_only
+                        if total_unique == 0: continue
+                        
+                        sizes = [ch1_only, ch2_only, coloc_events]
+                        labels = [f"Only {ch1_name}", f"Only {ch2_name}", "Colocalized"]
+                        colors = [ch1_color, ch2_color, coloc_color]
+                        
+                        plot_sizes = [s for s in sizes if s > 0]
+                        plot_labels = [l for s, l in zip(sizes, labels) if s > 0]
+                        plot_colors = [c for s, c in zip(sizes, colors) if s > 0]
+                        
+                        fig, ax = plt.subplots(figsize=(5, 5))
+                        fig.patch.set_facecolor(bg_color)
+                        
+                        wedges, texts, autotexts = ax.pie(
+                            plot_sizes, labels=plot_labels, autopct='%1.1f%%', colors=plot_colors, 
+                            startangle=140, textprops={'color': axes_color, 'fontsize': label_size}, 
+                            wedgeprops={'edgecolor': axes_color, 'linewidth': axes_width}
+                        )
+                        ax.set_title(item['label'], color=axes_color, fontweight='bold', fontsize=title_size)
+                        cols[idx % 3].pyplot(fig)
+                        
+                        coloc_summary.append({
+                            "Sample Label": item['label'],
+                            f"Only {ch1_name} Count": ch1_only,
+                            f"Only {ch2_name} Count": ch2_only,
+                            "Colocalized Count": coloc_events,
+                            "Total Unique Particles": total_unique,
+                            "Colocalized (%)": round((coloc_events / total_unique) * 100, 1) if total_unique > 0 else 0
+                        })
+                    else:
+                        st.warning(f"File {item['filename']} is missing 'Channel' or 'Colocalised' columns.")
+                        
+                st.markdown("---")
+                st.subheader("📊 Colocalization Data Summary")
+                if coloc_summary:
+                    st.dataframe(pd.DataFrame(coloc_summary), use_container_width=True)
