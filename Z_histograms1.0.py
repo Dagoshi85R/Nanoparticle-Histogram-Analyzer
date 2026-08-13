@@ -920,7 +920,7 @@ else:
                             
                             # Force absolute color matching and unlock palettes!
                             pops = np.sort(res['df']['Population'].unique())
-                            palette_to_use = active_palette if active_palette is not None else "viridis"
+                            palette_to_use = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                             pop_color_dict = {pop: col for pop, col in zip(pops, sns.color_palette(palette_to_use, n_colors=len(pops)))}
                             
                             sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
@@ -963,7 +963,7 @@ else:
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
                                 # Force absolute color matching and unlock palettes!
                                 pops = np.sort(res['df']['Population'].unique())
-                                palette_to_use = active_palette if active_palette is not None else "viridis"
+                                palette_to_use = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                                 pop_color_dict = {pop: col for pop, col in zip(pops, sns.color_palette(palette_to_use, n_colors=len(pops)))}
                                 
                                 sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax_sub)
