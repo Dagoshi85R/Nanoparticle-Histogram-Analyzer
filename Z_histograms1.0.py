@@ -904,7 +904,7 @@ else:
                             master_hists.to_excel(writer, sheet_name='5_Histogram_Data', index=False)
 
                         num_channels = len(gmm_results)
-                        total_rows = 1 + num_channels if num_channels > 1 else 1
+                        total_rows = num_channels + 1
                         fig_gmm = plt.figure(figsize=(14, 5 * total_rows))
                         fig_gmm.patch.set_facecolor(bg_color)
                         
