@@ -43,7 +43,7 @@ PALETTES = {
 with st.sidebar:
     st.image("logo.png", use_container_width=True)
     st.title("ZetaSphere Analyzer")
-    st.caption("Created by Daniel Gonzalez Silvera.\nImaging Facility, IRR, The University of Edinburgh.\n2026")
+    st.caption("Created by Daniel Gonzalez Silvera\nImaging Facility, IRR, The University of Edinburgh.\n2026")
     
     st.header("1. Upload Data")
     uploaded_files = st.file_uploader("Drag & Drop ZetaSphere .zip files (Multiple Samples Supported)", type=["zip"], accept_multiple_files=True)
@@ -151,6 +151,25 @@ def get_mode_from_kde(series):
     kde = gaussian_kde(data)
     x_vals = np.linspace(data.min(), data.max(), 1000)
     return x_vals[np.argmax(kde(x_vals))]
+
+def get_span(series):
+    data = series.dropna()
+    if len(data) < 2: return np.nan
+    d10, d50, d90 = np.percentile(data, [10, 50, 90])
+    return (d90 - d10) / d50 if d50 > 0 else np.nan
+
+def get_fwhm_from_kde(series):
+    data = series.dropna()
+    if len(data) < 2 or data.std() == 0: return np.nan
+    kde = gaussian_kde(data)
+    x_vals = np.linspace(data.min(), data.max(), 1000)
+    y_vals = kde(x_vals)
+    max_idx = np.argmax(y_vals)
+    half_max = np.max(y_vals) / 2.0
+    
+    left_half = x_vals[:max_idx][np.argmin(np.abs(y_vals[:max_idx] - half_max))] if max_idx > 0 else x_vals[0]
+    right_half = x_vals[max_idx:][np.argmin(np.abs(y_vals[max_idx:] - half_max))] if max_idx < len(x_vals)-1 else x_vals[-1]
+    return right_half - left_half
 
 def run_stats_comparisons(data_a, data_b):
     results = {}
@@ -401,7 +420,7 @@ else:
                         for i, (y_c, ent) in enumerate(reversed(kdes)):
                             current_offset = i * offset_step
                             if y_c is not None:
-                                ax.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.5)
+                                ax.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
                                 ax.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
                                 if central_marker != "None":
                                     val = np.nan
@@ -427,7 +446,7 @@ else:
                 summary_list = []
                 for ent in entities:
                     d = ent["data"]
-                    summary_list.append({"Sample": ent["label"], "Count": len(d), "Mean (nm)": round(d.mean(), 1), "Median (nm)": round(d.median(), 1), "Mode (nm)": round(get_mode_from_kde(d), 1), "SD (nm)": round(d.std(), 1)})
+                    summary_list.append({"Sample": ent["label"], "Count": len(d), "Mean (nm)": round(d.mean(), 1), "Median (nm)": round(d.median(), 1), "Mode (nm)": round(get_mode_from_kde(d), 1), "SD (nm)": round(d.std(), 1), "Span": round(get_span(d), 3), "FWHM (nm)": round(get_fwhm_from_kde(d), 1)})
                 st.dataframe(pd.DataFrame(summary_list), use_container_width=True)
                 
                 if len(entities) > 1:
@@ -555,7 +574,7 @@ else:
                         for i, (y_c, ent) in enumerate(reversed(kdes)):
                             current_offset = i * offset_step
                             if y_c is not None:
-                                ax_zeta.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.5)
+                                ax_zeta.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
                                 ax_zeta.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
                                 if central_marker != "None":
                                     val = np.nan
@@ -784,14 +803,19 @@ else:
                         df_clean['Population'] = models[best_n - 1].predict(X_log) + 1
                         total_particles = len(df_clean)
                         
-                        summary = df_clean.groupby('Population')[feature_col].agg(Mean='mean', Median=np.median, Mode=get_mode_from_kde, SD='std', Count='count')
+                        summary = df_clean.groupby('Population')[feature_col].agg(
+                            Mean='mean', Median=np.median, Mode=get_mode_from_kde, 
+                            SD='std', Count='count', Span=get_span, FWHM=get_fwhm_from_kde
+                        )
                         summary['Percentage (%)'] = (summary['Count'] / total_particles) * 100
                         
                         summary['Mean (nm)'] = summary['Mean'].round(1)
                         summary['Median (nm)'] = summary['Median'].round(1)
                         summary['Mode (nm)'] = summary['Mode'].round(1)
                         summary['SD (nm)'] = summary['SD'].round(1)
-                        summary = summary.drop(columns=['Mean', 'Median', 'Mode', 'SD']).reset_index()
+                        summary['Span'] = summary['Span'].round(3)
+                        summary['FWHM (nm)'] = summary['FWHM'].round(1)
+                        summary = summary.drop(columns=['Mean', 'Median', 'Mode', 'SD', 'FWHM']).reset_index()
                         summary.insert(0, 'Channel', ch)
                         
                         gmm_results[ch] = {
