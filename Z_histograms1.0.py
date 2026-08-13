@@ -920,8 +920,7 @@ else:
                         if central_marker != "None":
                             pops = np.sort(df_clean['Population'].unique())
                             # Fallback to a standard palette if 'Custom' is selected, since pops don't have predefined sample colors
-                            palette_to_use = active_palette if active_palette is not None else "tab10" 
-                            pop_colors = sns.color_palette(palette_to_use, n_colors=len(pops))
+                            pop_colors = sns.color_palette("viridis", n_colors=len(pops))
                             
                             for idx, pop in enumerate(pops):
                                 p_data = df_clean[df_clean['Population'] == pop][feature_col].dropna()
@@ -957,8 +956,7 @@ else:
                                 # --- NEW: Add Vertical Markers to Multi-Channel Sub-Populations ---
                                 if central_marker != "None":
                                     pops = np.sort(res['df']['Population'].unique())
-                                    palette_to_use = active_palette if active_palette is not None else "tab10" 
-                                    pop_colors = sns.color_palette(palette_to_use, n_colors=len(pops))
+                                    pop_colors = sns.color_palette("viridis", n_colors=len(pops))
                                     
                                     for idx, pop in enumerate(pops):
                                         p_data = res['df'][res['df']['Population'] == pop][res['feature_col']].dropna()
