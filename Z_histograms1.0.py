@@ -935,17 +935,42 @@ else:
                                         ax2.axvline(val, color=pop_colors[idx], linestyle='--', linewidth=line_width, zorder=5)
                             apply_custom_style(ax2, f"{ch} Particles Grouped into {res['best_n']} Populations", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
                         else:
-                            ax1, ax2 = plt.subplot(total_rows, 2, 1), plt.subplot(total_rows, 2, 2)
+                            # Use explicit GridSpec to prevent layout crashes
+                            gs = fig_gmm.add_gridspec(total_rows, 2)
+                            ax1 = fig_gmm.add_subplot(gs[0, 0])
+                            ax2 = fig_gmm.add_subplot(gs[0, 1])
+                            
                             for ch, res in gmm_results.items():
                                 c = res['color']
                                 ax1.plot(range(1, max_pops + 1), res['bic'], marker='o', linestyle='-', color=c, label=ch)
                                 plot_custom_distribution(ax2, res['df'], res['feature_col'], bins_ext, x_vals_ext, gmm_bin_width, c, '-', line_width, ch, display_style)
+                                
                             ax1.set_xticks(range(1, max_pops + 1)) 
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=show_legend)
                             apply_custom_style(ax2, "Multi-Channel Size Distribution Overlay", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
+                            
                             for i, (ch, res) in enumerate(gmm_results.items()):
-                                ax_sub = plt.subplot(total_rows, 1, i + 2)
+                                # Span the sub-population graphs across both columns cleanly
+                                ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
                                 sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette='viridis', element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax_sub)
+                                
+                                # --- NEW: Add Vertical Markers to Multi-Channel Sub-Populations ---
+                                if central_marker != "None":
+                                    pops = np.sort(res['df']['Population'].unique())
+                                    palette_to_use = active_palette if active_palette is not None else "tab10" 
+                                    pop_colors = sns.color_palette(palette_to_use, n_colors=len(pops))
+                                    
+                                    for idx, pop in enumerate(pops):
+                                        p_data = res['df'][res['df']['Population'] == pop][res['feature_col']].dropna()
+                                        if len(p_data) > 1:
+                                            val = None
+                                            if central_marker == "Mean": val = p_data.mean()
+                                            elif central_marker == "Median": val = p_data.median()
+                                            elif central_marker == "Mode": val = get_mode_from_kde(p_data)
+                                            
+                                            if val is not None and not pd.isna(val):
+                                                ax_sub.axvline(val, color=pop_colors[idx], linestyle='--', linewidth=line_width, zorder=5)
+                                                
                                 apply_custom_style(ax_sub, f"Sub-population Breakdown: {ch} ({res['best_n']} Populations Found)", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
 
                         plt.tight_layout()
