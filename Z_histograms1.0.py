@@ -634,6 +634,13 @@ else:
                         for spine in jg.ax_joint.spines.values(): 
                             spine.set_color(axes_color)
                             spine.set_linewidth(axes_width)
+                            
+                        # Apply thickness and colors to the marginal histogram axes
+                        for ax_marg in [jg.ax_marg_x, jg.ax_marg_y]:
+                            ax_marg.tick_params(colors=axes_color, width=axes_width)
+                            for spine in ax_marg.spines.values():
+                                spine.set_color(axes_color)
+                                spine.set_linewidth(axes_width)
                         if show_grid: jg.ax_joint.grid(True, linestyle='--', linewidth=0.5, alpha=0.3, color=axes_color)
                         
                         if show_legend and jg.ax_joint.get_legend():
