@@ -171,6 +171,12 @@ def get_fwhm_from_kde(series):
     right_half = x_vals[max_idx:][np.argmin(np.abs(y_vals[max_idx:] - half_max))] if max_idx < len(x_vals)-1 else x_vals[-1]
     return right_half - left_half
 
+def get_mad(series):
+    data = series.dropna()
+    if len(data) < 2: return np.nan
+    med = np.median(data)
+    return np.median(np.abs(data - med))
+
 def run_stats_comparisons(data_a, data_b):
     results = {}
     if len(data_a) == 0 or len(data_b) == 0: return results
@@ -446,7 +452,7 @@ else:
                 summary_list = []
                 for ent in entities:
                     d = ent["data"]
-                    summary_list.append({"Sample": ent["label"], "Count": len(d), "Mean (nm)": round(d.mean(), 1), "Median (nm)": round(d.median(), 1), "Mode (nm)": round(get_mode_from_kde(d), 1), "SD (nm)": round(d.std(), 1), "Span": round(get_span(d), 3), "FWHM (nm)": round(get_fwhm_from_kde(d), 1)})
+                    summary_list.append({"Sample": ent["label"], "Count": len(d), "Mean (nm)": round(d.mean(), 1), "Median (nm)": round(d.median(), 1), "Mode (nm)": round(get_mode_from_kde(d), 1), "SD (nm)": round(d.std(), 1), "MAD (nm)": round(get_mad(d), 1), "Span": round(get_span(d), 3), "FWHM (nm)": round(get_fwhm_from_kde(d), 1)})
                 st.dataframe(pd.DataFrame(summary_list), use_container_width=True)
                 
                 if len(entities) > 1:
@@ -812,7 +818,7 @@ else:
                         
                         summary = df_clean.groupby('Population')[feature_col].agg(
                             Mean='mean', Median=np.median, Mode=get_mode_from_kde, 
-                            SD='std', Count='count', Span=get_span, FWHM=get_fwhm_from_kde
+                            SD='std', MAD=get_mad, Count='count', Span=get_span, FWHM=get_fwhm_from_kde
                         )
                         summary['Percentage (%)'] = (summary['Count'] / total_particles) * 100
                         
@@ -820,9 +826,10 @@ else:
                         summary['Median (nm)'] = summary['Median'].round(1)
                         summary['Mode (nm)'] = summary['Mode'].round(1)
                         summary['SD (nm)'] = summary['SD'].round(1)
+                        summary['MAD (nm)'] = summary['MAD'].round(1)
                         summary['Span'] = summary['Span'].round(3)
                         summary['FWHM (nm)'] = summary['FWHM'].round(1)
-                        summary = summary.drop(columns=['Mean', 'Median', 'Mode', 'SD', 'FWHM']).reset_index()
+                        summary = summary.drop(columns=['Mean', 'Median', 'Mode', 'SD', 'MAD', 'FWHM']).reset_index()
                         summary.insert(0, 'Channel', ch)
                         
                         gmm_results[ch] = {
