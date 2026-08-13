@@ -915,6 +915,24 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette='viridis', element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
+
+                        # --- NEW: Add Vertical Markers to Sub-Populations ---
+                        if central_marker != "None":
+                            pops = np.sort(df_clean['Population'].unique())
+                            # Fallback to a standard palette if 'Custom' is selected, since pops don't have predefined sample colors
+                            palette_to_use = active_palette if active_palette is not None else "tab10" 
+                            pop_colors = sns.color_palette(palette_to_use, n_colors=len(pops))
+                            
+                            for idx, pop in enumerate(pops):
+                                p_data = df_clean[df_clean['Population'] == pop][feature_col].dropna()
+                                if len(p_data) > 1:
+                                    val = None
+                                    if central_marker == "Mean": val = p_data.mean()
+                                    elif central_marker == "Median": val = p_data.median()
+                                    elif central_marker == "Mode": val = get_mode_from_kde(p_data)
+                                    
+                                    if val is not None and not pd.isna(val):
+                                        ax2.axvline(val, color=pop_colors[idx], linestyle='--', linewidth=line_width, zorder=5)
                             apply_custom_style(ax2, f"{ch} Particles Grouped into {res['best_n']} Populations", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
                         else:
                             ax1, ax2 = plt.subplot(total_rows, 2, 1), plt.subplot(total_rows, 2, 2)
