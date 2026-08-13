@@ -27,7 +27,12 @@ PALETTES = {
     "Viridis": "viridis",
     "Plasma": "plasma",
     "Pastel": "pastel",
+    "Magma": "magma",
+    "Coolwarm": "coolwarm",
     "Colorblind": "colorblind",
+    "Inferno": "inferno",
+    "Cividis": "cividis",
+    "Tab10": "tab10",
     "Spectral": "Spectral",
     "Set1": "Set1",
     "Set2": "Set2",
@@ -396,7 +401,7 @@ else:
                         for i, (y_c, ent) in enumerate(reversed(kdes)):
                             current_offset = i * offset_step
                             if y_c is not None:
-                                ax.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
+                                ax.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.5)
                                 ax.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
                                 if central_marker != "None":
                                     val = np.nan
@@ -550,7 +555,7 @@ else:
                         for i, (y_c, ent) in enumerate(reversed(kdes)):
                             current_offset = i * offset_step
                             if y_c is not None:
-                                ax_zeta.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
+                                ax_zeta.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.5)
                                 ax_zeta.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
                                 if central_marker != "None":
                                     val = np.nan
