@@ -38,7 +38,7 @@ PALETTES = {
 with st.sidebar:
     st.image("logo.png", use_container_width=True)
     st.title("ZetaSphere Analyzer")
-    st.caption("Created by Daniel Gonzalez Silvera\nImaging Facility, IRR, The University of Edinburgh.\n2026")
+    st.caption("Created by Daniel Gonzalez Silvera.\nImaging Facility, IRR, The University of Edinburgh.\n2026")
     
     st.header("1. Upload Data")
     uploaded_files = st.file_uploader("Drag & Drop ZetaSphere .zip files (Multiple Samples Supported)", type=["zip"], accept_multiple_files=True)
