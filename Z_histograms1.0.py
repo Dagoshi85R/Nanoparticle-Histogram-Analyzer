@@ -840,7 +840,7 @@ else:
                     
                     if not gmm_results:
                         st.warning("No active valid particles found for selected channels.")
-
+                    else:
                         global_stats_list = []
                         scatter_data = gmm_results['Scatter']['df'][gmm_results['Scatter']['feature_col']].dropna() if 'Scatter' in gmm_results else None
                         
