@@ -913,11 +913,11 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # Force maximum contrast and unlock palettes!
+                            # Force maximum contrast safely via Seaborn
                             pops = np.sort(res['df']['Population'].unique())
                             palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                            cmap = plt.get_cmap(palette_name)
-                            pop_color_dict = {pop: cmap(idx / max(1, len(pops) - 1)) for idx, pop in enumerate(pops)}
+                            full_pal = sns.color_palette(palette_name, n_colors=256)
+                            pop_color_dict = {pop: full_pal[int(idx * 255 / max(1, len(pops) - 1))] for idx, pop in enumerate(pops)}
                             
                             sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
                             
@@ -958,11 +958,11 @@ else:
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
                                 
-                                # Force maximum contrast and unlock palettes!
+                                # Force maximum contrast safely via Seaborn
                                 pops = np.sort(res['df']['Population'].unique())
                                 palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                                cmap = plt.get_cmap(palette_name)
-                                pop_color_dict = {pop: cmap(idx / max(1, len(pops) - 1)) for idx, pop in enumerate(pops)}
+                                full_pal = sns.color_palette(palette_name, n_colors=256)
+                                pop_color_dict = {pop: full_pal[int(idx * 255 / max(1, len(pops) - 1))] for idx, pop in enumerate(pops)}
                                 
                                 sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax_sub)
                                 
