@@ -840,7 +840,6 @@ else:
                     
                     if not gmm_results:
                         st.warning("No active valid particles found for selected channels.")
-                    else:
 
                         global_stats_list = []
                         scatter_data = gmm_results['Scatter']['df'][gmm_results['Scatter']['feature_col']].dropna() if 'Scatter' in gmm_results else None
@@ -914,12 +913,11 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # Force absolute color matching and unlock palettes!
+                            # Force maximum contrast and unlock palettes!
                             pops = np.sort(res['df']['Population'].unique())
                             palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                                cmap = plt.get_cmap(palette_name)
-                                # Force maximum contrast by pulling from the absolute extremes of the colormap
-                                pop_color_dict = {pop: cmap(idx / max(1, len(pops) - 1)) for idx, pop in enumerate(pops)}
+                            cmap = plt.get_cmap(palette_name)
+                            pop_color_dict = {pop: cmap(idx / max(1, len(pops) - 1)) for idx, pop in enumerate(pops)}
                             
                             sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
                             
@@ -938,7 +936,6 @@ else:
                             
                             apply_custom_style(ax2, f"{ch} Particles Grouped into {res['best_n']} Populations", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
                             
-                        else:
                             # --- MULTI-CHANNEL LAYOUT (Strict Grid Layout) ---
                             total_rows = num_channels + 1
                             fig_gmm = plt.figure(figsize=(14, 5 * total_rows))
@@ -959,11 +956,10 @@ else:
                             
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
-                                # Force absolute color matching and unlock palettes!
+                                # Force maximum contrast and unlock palettes!
                                 pops = np.sort(res['df']['Population'].unique())
                                 palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                                 cmap = plt.get_cmap(palette_name)
-                                # Force maximum contrast by pulling from the absolute extremes of the colormap
                                 pop_color_dict = {pop: cmap(idx / max(1, len(pops) - 1)) for idx, pop in enumerate(pops)}
                                 
                                 sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax_sub)
