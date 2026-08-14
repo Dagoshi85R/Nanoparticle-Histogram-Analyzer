@@ -936,6 +936,7 @@ else:
                             
                             apply_custom_style(ax2, f"{ch} Particles Grouped into {res['best_n']} Populations", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
                             
+                        else:
                             # --- MULTI-CHANNEL LAYOUT (Strict Grid Layout) ---
                             total_rows = num_channels + 1
                             fig_gmm = plt.figure(figsize=(14, 5 * total_rows))
@@ -956,6 +957,7 @@ else:
                             
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
+                                
                                 # Force maximum contrast and unlock palettes!
                                 pops = np.sort(res['df']['Population'].unique())
                                 palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
