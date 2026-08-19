@@ -1014,6 +1014,7 @@ else:
                 st.info("No active Colocalization data to plot.")
             else:
                 coloc_summary = []
+                plot_data_list = []  # Stores data to generate the master grid later
                 cols = st.columns(3)
                 
                 for idx, (ch_group, item) in enumerate(active_coloc_items):
@@ -1059,16 +1060,35 @@ else:
                         plot_labels = [l for s, l in zip(sizes, labels) if s > 0]
                         plot_colors = [c for s, c in zip(sizes, colors) if s > 0]
                         
-                        fig, ax = plt.subplots(figsize=(5, 5))
+                        # Save for the Master Grid
+                        plot_data_list.append({
+                            'title': item['label'], 'sizes': plot_sizes, 
+                            'labels': plot_labels, 'colors': plot_colors
+                        })
+                        
+                        fig, ax = plt.subplots(figsize=(6, 5) if show_legend else (5, 5))
                         fig.patch.set_facecolor(bg_color)
                         
+                        # Swap external text for a legend if the user has requested it
+                        pie_labels = None if show_legend else plot_labels
+                        
                         wedges, texts, autotexts = ax.pie(
-                            plot_sizes, labels=plot_labels, autopct='%1.1f%%', colors=plot_colors, 
+                            plot_sizes, labels=pie_labels, autopct='%1.1f%%', colors=plot_colors, 
                             startangle=140, textprops={'color': axes_color, 'fontsize': label_size}, 
                             wedgeprops={'edgecolor': axes_color, 'linewidth': axes_width}
                         )
+                        
+                        if show_legend:
+                            ax.legend(wedges, plot_labels, loc="center left", bbox_to_anchor=(1, 0.5), facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color)
+                            
                         ax.set_title(item['label'], color=axes_color, fontweight='bold', fontsize=title_size)
-                        cols[idx % 3].pyplot(fig)
+                        
+                        # Render pie chart and Individual Download Buttons inside the column
+                        with cols[idx % 3]:
+                            st.pyplot(fig)
+                            safe_filename = f"Colocalization_{item['label'].replace(' ', '_')}"
+                            create_download_buttons(fig, safe_filename)
+                            plt.close(fig)
                         
                         coloc_summary.append({
                             "Sample Label": item['label'],
@@ -1080,6 +1100,41 @@ else:
                         })
                     else:
                         st.warning(f"File {item['filename']} is missing 'Channel' or 'Colocalised' columns.")
+                        
+                # --- NEW: Master Grid Generator ---
+                if plot_data_list:
+                    st.markdown("---")
+                    st.subheader("🖼️ Download Master Grid")
+                    st.markdown("Export all active pie charts combined into a single, high-resolution panel:")
+                    
+                    n_plots = len(plot_data_list)
+                    cols_grid = min(3, n_plots)
+                    rows_grid = (n_plots + cols_grid - 1) // cols_grid
+                    
+                    # Expand width slightly to accommodate legends without squeezing the circles
+                    master_width = (6 if show_legend else 5) * cols_grid
+                    fig_master = plt.figure(figsize=(master_width, 5 * rows_grid))
+                    fig_master.patch.set_facecolor(bg_color)
+                    
+                    for i, p_data in enumerate(plot_data_list):
+                        ax_m = fig_master.add_subplot(rows_grid, cols_grid, i + 1)
+                        pie_labels_m = None if show_legend else p_data['labels']
+                        
+                        wedges_m, texts_m, autotexts_m = ax_m.pie(
+                            p_data['sizes'], labels=pie_labels_m, autopct='%1.1f%%', 
+                            colors=p_data['colors'], startangle=140, 
+                            textprops={'color': axes_color, 'fontsize': label_size},
+                            wedgeprops={'edgecolor': axes_color, 'linewidth': axes_width}
+                        )
+                        ax_m.set_title(p_data['title'], color=axes_color, fontweight='bold', fontsize=title_size)
+                        
+                        if show_legend:
+                            ax_m.legend(wedges_m, p_data['labels'], loc="center left", bbox_to_anchor=(1, 0.5), facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color)
+                    
+                    # Ensure legends don't get cut off from the edges of the image
+                    plt.tight_layout()
+                    create_download_buttons(fig_master, "Colocalization_Master_Grid")
+                    plt.close(fig_master)
                         
                 st.markdown("---")
                 st.subheader("📊 Colocalization Data Summary")
