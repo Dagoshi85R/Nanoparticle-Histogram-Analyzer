@@ -51,7 +51,14 @@ with st.sidebar:
     st.header("2. Display Customization")
     palette_choice = st.selectbox("Color Palette", list(PALETTES.keys()), help="Select a predefined colorset, or use your custom manual colors.")
     multi_layout = st.radio("Multi-Sample Layout", ["Overlay (Default)", "Facet Grid", "Ridgeline (Joyplot)"], help="Choose how multiple active samples are displayed.")
-    
+    st.markdown("---")
+    st.subheader("Data Filtering")
+    min_trace_length = st.slider(
+        "Minimum Trace Length (Frames)", 
+        min_value=1, max_value=50, value=1, step=1, 
+        help="Filter out particles tracked for too few frames. Use this to match ZetaSphere's internal thresholds."
+        )
+
     if multi_layout == "Facet Grid":
         facet_share_y = st.checkbox("Share Y-Axis across Facets", value=True, help="Keep all subplots on the exact same vertical scale.")
     else:
@@ -1018,7 +1025,14 @@ else:
                 cols = st.columns(3)
                 
                 for idx, (ch_group, item) in enumerate(active_coloc_items):
-                    df = item['df']
+                    # Make a copy so we don't permanently delete data from memory when sliding
+                    df = item['df'].copy() 
+                    
+                    # --- NEW: Dynamically Filter by Trace Length ---
+                    trace_col = find_data_column(df, ['trace length', 'tracelength', 'frames'])
+                    if trace_col:
+                        df = df[df[trace_col] >= min_trace_length]
+                        
                     ch_col = find_data_column(df, ['channel'])
                     coloc_col = find_data_column(df, ['colocalised', 'colocalized'])
                     
