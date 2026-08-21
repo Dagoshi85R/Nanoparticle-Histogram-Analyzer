@@ -1019,7 +1019,8 @@ else:
     # ==========================================
     with tab5:
         st.header("Colocalization Analysis")
-        
+        use_palette_t5 = st.checkbox("🎨 Override default colors with sidebar palette", key="tab5_color_override")
+
         if not processed_data.get('Colocalization'):
             st.warning("No 'Colocalization' measurement files detected.")
         else:
@@ -1035,7 +1036,6 @@ else:
                 st.info("No active Colocalization data to plot.")
             else:
                 # --- NEW: Tab 5 Override Checkbox ---
-                use_palette_t5 = st.checkbox("Override default colors with sidebar palette", key="tab5_color_override")
                 
                 coloc_summary = []
                 plot_data_list = []  # Stores data to generate the master grid later
@@ -1178,6 +1178,7 @@ else:
     # ==========================================
     with tab6:
         st.header("Colocalization Quality & Morphology")
+        use_palette_t6 = st.checkbox("🎨 Override default colors with sidebar palette", key="tab6_color_override")
         
         if not processed_data.get('Colocalization'):
             st.warning("No 'Colocalization' measurement files detected.")
@@ -1187,7 +1188,6 @@ else:
             if not active_coloc_items:
                 st.info("No active Colocalization data to plot.")
             else:
-                use_palette_t6 = st.checkbox("Override default colors with sidebar palette", key="tab6_color_override")
                 for idx, item in enumerate(active_coloc_items):
                     df = item['df'].copy()
                     
