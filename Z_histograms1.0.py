@@ -78,6 +78,27 @@ with st.sidebar:
     show_legend = st.checkbox("Show Legend", value=True)
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
 
+    st.markdown("---")
+        st.subheader("Data Filtering")
+        min_trace_length = st.slider(
+            "Minimum Trace Length (Frames)", 
+            min_value=1, max_value=50, value=1, step=1, 
+            help="Filter out particles tracked for too few frames."
+        )
+
+    st.markdown("---")
+    st.subheader("Advanced Colocalization")
+    show_link_radius = st.checkbox("Modify Link Radius")
+    if show_link_radius:
+        st.info("💡 **Note:** The manufacturer recommended setting is 10 pixels.")
+        link_radius = st.slider(
+            "Link Radius (Pixels)", 
+            min_value=1.0, max_value=30.0, value=10.0, step=1.0, 
+            help="The spatial tolerance used to match moving particles between the two consecutive laser recordings."
+        )
+    else:
+        link_radius = 10.0
+
 # --- Helper Functions ---
 def parse_file_info(uploaded_file):
     filename = uploaded_file.name
@@ -322,7 +343,7 @@ else:
                         st.write("---")
                     col_idx += 1
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Multi-Sample Size", "Zeta Potential", "Concentration", "Population Analysis (GMM)", "Colocalization"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Multi-Sample Size", "Zeta Potential", "Concentration", "Population Analysis (GMM)", "Colocalization", "Colocalization Quality"])
 
     # ==========================================
     # TAB 1: SIZE OVERVIEW & MULTI-SAMPLE
@@ -1140,3 +1161,118 @@ else:
                 st.subheader("📊 Colocalization Data Summary")
                 if coloc_summary:
                     st.dataframe(pd.DataFrame(coloc_summary), use_container_width=True)
+
+    # ==========================================
+    # TAB 6: COLOCALIZATION QUALITY
+    # ==========================================
+    with tab6:
+        st.header("Colocalization Quality & Morphology")
+        
+        if not processed_data.get('Colocalization'):
+            st.warning("No 'Colocalization' measurement files detected.")
+        else:
+            active_coloc_items = [item for items in processed_data['Colocalization'].values() for item in items if item['active']]
+            
+            if not active_coloc_items:
+                st.info("No active Colocalization data to plot.")
+            else:
+                for idx, item in enumerate(active_coloc_items):
+                    df = item['df'].copy()
+                    
+                    # Find our necessary columns
+                    ch_col = find_data_column(df, ['channel'])
+                    coloc_col = find_data_column(df, ['colocalised', 'colocalized'])
+                    pos_col = find_data_column(df, ['position'])
+                    x_col = find_data_column(df, ['xc'])
+                    y_col = find_data_column(df, ['yc'])
+                    int_col = find_data_column(df, ['mean intensity'])
+                    area_col = find_data_column(df, ['mean area'])
+                    ar_col = find_data_column(df, ['aspect ratio'])
+                    size_col = find_data_column(df, ['particle size'])
+                    
+                    if not all([ch_col, coloc_col, pos_col, x_col, y_col, int_col, area_col, ar_col, size_col]):
+                        st.warning(f"File {item['filename']} is missing required morphology/coordinate columns.")
+                        continue
+                        
+                    st.subheader(f"Data for: {item['label']}")
+                    
+                    # 1. Filter for ONLY colocalized particles
+                    coloc_df = df[df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0'])]
+                    
+                    unique_chs = df[ch_col].dropna().unique()
+                    if len(unique_chs) < 2: continue
+                    ch1_val, ch2_val = unique_chs[0], unique_chs[1]
+                    
+                    matched_pairs = []
+                    
+                    # 2. Iterate by position to find matches
+                    for pos in coloc_df[pos_col].unique():
+                        pos_data = coloc_df[coloc_df[pos_col] == pos]
+                        c1_data = pos_data[pos_data[ch_col] == ch1_val]
+                        c2_data = pos_data[pos_data[ch_col] == ch2_val]
+                        
+                        if c1_data.empty or c2_data.empty: continue
+                        
+                        # 3. Euclidean Distance Matrix using NumPy
+                        x1, y1 = c1_data[x_col].values, c1_data[y_col].values
+                        x2, y2 = c2_data[x_col].values, c2_data[y_col].values
+                        
+                        dist_matrix = np.sqrt((x1[:, np.newaxis] - x2)**2 + (y1[:, np.newaxis] - y2)**2)
+                        
+                        # 4. Find pairs within the link radius
+                        for i in range(dist_matrix.shape[0]):
+                            min_idx = np.argmin(dist_matrix[i])
+                            if dist_matrix[i, min_idx] <= link_radius:
+                                matched_pairs.append({
+                                    'C1_Intensity': c1_data.iloc[i][int_col],
+                                    'C2_Intensity': c2_data.iloc[min_idx][int_col],
+                                    'Colocalized_Area': (c1_data.iloc[i][area_col] + c2_data.iloc[min_idx][area_col]) / 2,
+                                    'Colocalized_AR': (c1_data.iloc[i][ar_col] + c2_data.iloc[min_idx][ar_col]) / 2,
+                                })
+                                
+                    matched_df = pd.DataFrame(matched_pairs)
+                    
+                    if matched_df.empty:
+                        st.warning("No colocalized pairs could be matched within the given Link Radius.")
+                        continue
+                        
+                    # Create the 3-panel plotting grid
+                    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 5))
+                    fig.patch.set_facecolor(bg_color)
+                    
+                    # Plot 1: Intensity Stoichiometry (Scatter)
+                    sns.regplot(data=matched_df, x='C1_Intensity', y='C2_Intensity', ax=ax1, scatter_kws={'alpha': 0.5}, color='#FFD700')
+                    ax1.set_title("Dye Stoichiometry", color=axes_color, fontweight='bold')
+                    ax1.set_xlabel("Channel 1 Mean Intensity", color=axes_color)
+                    ax1.set_ylabel("Channel 2 Mean Intensity", color=axes_color)
+                    
+                    # Data Prep for Morphology & Size
+                    single_c1 = df[(df[ch_col] == ch1_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
+                    single_c2 = df[(df[ch_col] == ch2_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
+                    
+                    morph_df = pd.DataFrame({
+                        'Group': ['Only C1']*len(single_c1) + ['Only C2']*len(single_c2) + ['Colocalized']*len(matched_df),
+                        'Area': pd.concat([single_c1[area_col], single_c2[area_col], matched_df['Colocalized_Area']]),
+                        'Size': pd.concat([single_c1[size_col], single_c2[size_col], df[df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0'])][size_col]])
+                    })
+                    
+                    # Plot 2: Aggregation Check (Boxplot for Area)
+                    sns.boxplot(data=morph_df, x='Group', y='Area', ax=ax2, palette=["#0000FF", "#008000", "#FFD700"])
+                    ax2.set_title("Aggregation Check (Area)", color=axes_color, fontweight='bold')
+                    ax2.set_ylabel("Mean Area", color=axes_color)
+                    ax2.set_xlabel("")
+                    
+                    # Plot 3: Hydrodynamic Size Shift (KDE)
+                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax3, fill=True, palette=["#0000FF", "#008000", "#FFD700"], alpha=0.3)
+                    ax3.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold')
+                    ax3.set_xlabel("Particle Size (nm)", color=axes_color)
+                    
+                    # Polish axes
+                    for ax in [ax1, ax2, ax3]:
+                        ax.tick_params(colors=axes_color)
+                        for spine in ax.spines.values(): spine.set_color(axes_color)
+                        ax.set_facecolor(bg_color)
+                        
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    st.markdown("---")
