@@ -1252,24 +1252,39 @@ else:
                     ax1.set_xlabel("Channel 1 Mean Intensity", color=axes_color, fontsize=label_size)
                     ax1.set_ylabel("Channel 2 Mean Intensity", color=axes_color, fontsize=label_size)
                     
+                    # --- NEW: DYNAMIC CHANNEL NAMES & COLORS ---
+                    name_lower = item['filename'].lower()
+                    found = []
+                    for code, (c_name, color) in DEFAULT_CHANNELS.items():
+                        id_pos = name_lower.find(code.lower())
+                        if id_pos != -1: found.append((id_pos, c_name, color))
+                    found.sort()
+                    
+                    ch1_name = found[0][1] if len(found) >= 1 else "Channel 1"
+                    ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
+                    ch1_color = found[0][2] if len(found) >= 1 else "#0000FF"
+                    ch2_color = found[1][2] if len(found) >= 2 else "#008000"
+                    coloc_color = "#FFD700" 
+                    palette_colors = [ch1_color, ch2_color, coloc_color]
+
                     # Data Prep for Morphology & Size
                     single_c1 = df[(df[ch_col] == ch1_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
                     single_c2 = df[(df[ch_col] == ch2_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
                     
                     morph_df = pd.DataFrame({
-                        'Group': ['Only C1']*len(single_c1) + ['Only C2']*len(single_c2) + ['Colocalized']*len(matched_df),
+                        'Group': [f'Only {ch1_name}']*len(single_c1) + [f'Only {ch2_name}']*len(single_c2) + ['Colocalized']*len(matched_df),
                         'Area': pd.concat([single_c1[area_col], single_c2[area_col], matched_df['Colocalized_Area']], ignore_index=True),
                         'Size': pd.concat([single_c1[size_col], single_c2[size_col], matched_df['Colocalized_Size']], ignore_index=True)
                     })
                     
                     # Plot 2: Aggregation Check (Boxplot for Area)
-                    sns.boxplot(data=morph_df, x='Group', y='Area', ax=ax2, palette=["#0000FF", "#008000", "#FFD700"], linewidth=line_width)
+                    sns.boxplot(data=morph_df, x='Group', y='Area', ax=ax2, palette=palette_colors, linewidth=line_width)
                     ax2.set_title("Aggregation Check (Area)", color=axes_color, fontweight='bold', fontsize=title_size)
                     ax2.set_ylabel("Mean Area", color=axes_color, fontsize=label_size)
                     ax2.set_xlabel("", fontsize=label_size)
                     
                     # Plot 3: Hydrodynamic Size Shift (KDE)
-                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax3, fill=True, palette=["#0000FF", "#008000", "#FFD700"], alpha=0.3, linewidth=line_width)
+                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax3, fill=True, palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend)
                     ax3.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
                     ax3.set_xlabel("Particle Size (nm)", color=axes_color, fontsize=label_size)
                     ax3.set_ylabel("Density", color=axes_color, fontsize=label_size)
@@ -1282,33 +1297,34 @@ else:
                             spine.set_linewidth(axes_width)
                         ax.set_facecolor(bg_color)
                         
-                        # Style the legend for the KDE plot
-                        legend = ax.get_legend()
+                    # Style the legend for the KDE plot (tied to the sidebar toggle)
+                    if show_legend:
+                        legend = ax3.get_legend()
                         if legend is not None:
                             plt.setp(legend.get_texts(), color=axes_color, fontsize=leg_size)
                             plt.setp(legend.get_title(), color=axes_color, fontsize=leg_size, fontweight='bold')
                             legend.get_frame().set_facecolor(bg_color)
                             legend.get_frame().set_edgecolor(axes_color)
                             legend.get_frame().set_linewidth(axes_width)
-                        
+                            
                     plt.tight_layout()
                     st.pyplot(fig)
+                    
+                    # --- NEW: Image Download Buttons ---
+                    safe_filename = f"Coloc_Quality_{item['label'].replace(' ', '_')}"
+                    create_download_buttons(fig, safe_filename)
+                    plt.close(fig)
 
-                    # --- NEW: Stoichiometry Statistics & Scoring ---
-                    # Calculate Pearson correlation (r) and R-squared
+                    # --- Stoichiometry Statistics & Scoring ---
                     r_val = matched_df['C1_Intensity'].corr(matched_df['C2_Intensity'])
                     r_sq = r_val ** 2
                     
-                    # Determine Correlation Quality Score
                     if r_val >= 0.7:
-                        score = "🟢 Strong (Good)"
-                        exp = "A high score indicates proportional binding. For TetraSpeck beads, this proves the fluorophores are evenly distributed on the particles. In biological samples, this suggests target receptors are expressed at constant ratios."
+                        score, exp = "🟢 Strong (Good)", "A high score indicates proportional binding. For TetraSpeck beads, this proves the fluorophores are evenly distributed on the particles. In biological samples, this suggests target receptors are expressed at constant ratios."
                     elif r_val >= 0.4:
-                        score = "🟡 Moderate (Medium)"
-                        exp = "A medium score suggests some proportional binding, but with significant variation. Beads might be photobleaching unevenly, or biological targets have variable expression."
+                        score, exp = "🟡 Moderate (Medium)", "A medium score suggests some proportional binding, but with significant variation. Beads might be photobleaching unevenly, or biological targets have variable expression."
                     else:
-                        score = "🔴 Weak (Bad)"
-                        exp = "A low score means the intensities are independent. Binding is random. For TetraSpeck beads, this indicates severe degradation, photobleaching, or measurement noise."
+                        score, exp = "🔴 Weak (Bad)", "A low score means the intensities are independent. Binding is random. For TetraSpeck beads, this indicates severe degradation, photobleaching, or measurement noise."
 
                     st.markdown("### 📈 Stoichiometry Statistical Summary")
                     stat_cols = st.columns(3)
@@ -1316,44 +1332,37 @@ else:
                     stat_cols[1].metric("R-squared (R²)", round(r_sq, 3))
                     stat_cols[2].metric("Correlation Quality", score)
                     st.info(f"**Interpretation:** {exp}")
-                    
-                    # --- NEW: Morphology & Size Statistics ---
+
+                    # --- Morphology & Size Statistics ---
                     st.markdown("### 🔬 Aggregation & Size Summary")
                     
-                    # 1. Calculate Medians for Area (Aggregation Check)
-                    med_area_c1 = morph_df[morph_df['Group'] == 'Only C1']['Area'].median()
-                    med_area_c2 = morph_df[morph_df['Group'] == 'Only C2']['Area'].median()
+                    med_area_c1 = morph_df[morph_df['Group'] == f'Only {ch1_name}']['Area'].median()
+                    med_area_c2 = morph_df[morph_df['Group'] == f'Only {ch2_name}']['Area'].median()
                     med_area_coloc = morph_df[morph_df['Group'] == 'Colocalized']['Area'].median()
                     
-                    # Safety check for empty groups
                     med_area_c1 = med_area_c1 if pd.notna(med_area_c1) else 0
                     med_area_c2 = med_area_c2 if pd.notna(med_area_c2) else 0
                     
                     avg_single_area = (med_area_c1 + med_area_c2) / 2
                     area_ratio = med_area_coloc / avg_single_area if avg_single_area > 0 else 1
                     
-                    # Grade the Aggregation Risk
                     if area_ratio >= 1.5:
-                        area_score = "🔴 High Risk"
-                        area_exp = "Colocalized particles have a significantly larger cross-sectional area (≥50% bigger) than single-positive particles. This strongly suggests physical clumping (doublets/aggregates) rather than true single-particle colocalization."
+                        area_score, area_exp = "🔴 High Risk", "Colocalized particles have a significantly larger cross-sectional area (≥50% bigger) than single-positive particles. This strongly suggests physical clumping (doublets/aggregates) rather than true single-particle colocalization."
                     elif area_ratio >= 1.2:
-                        area_score = "🟡 Moderate Risk"
-                        area_exp = "Colocalized particles are slightly larger on average, indicating a possible mix of true colocalized events and some small aggregates."
+                        area_score, area_exp = "🟡 Moderate Risk", "Colocalized particles are slightly larger on average, indicating a possible mix of true colocalized events and some small aggregates."
                     else:
-                        area_score = "🟢 Low Risk"
-                        area_exp = "The optical areas are highly comparable. Colocalized particles maintain a single-particle optical profile, confirming high-quality colocalization without clumping."
+                        area_score, area_exp = "🟢 Low Risk", "The optical areas are highly comparable. Colocalized particles maintain a single-particle optical profile, confirming high-quality colocalization without clumping."
 
                     st.markdown("**1. Aggregation Check (Area)**")
                     area_cols = st.columns(4)
-                    area_cols[0].metric("C1 Median Area", round(med_area_c1, 1))
-                    area_cols[1].metric("C2 Median Area", round(med_area_c2, 1))
+                    area_cols[0].metric(f"{ch1_name} Median Area", round(med_area_c1, 1))
+                    area_cols[1].metric(f"{ch2_name} Median Area", round(med_area_c2, 1))
                     area_cols[2].metric("Colocalized Area", round(med_area_coloc, 1))
                     area_cols[3].metric("Aggregation Status", area_score)
                     st.info(f"**Interpretation:** {area_exp}")
 
-                    # 2. Calculate Medians for Hydrodynamic Size
-                    med_size_c1 = morph_df[morph_df['Group'] == 'Only C1']['Size'].median()
-                    med_size_c2 = morph_df[morph_df['Group'] == 'Only C2']['Size'].median()
+                    med_size_c1 = morph_df[morph_df['Group'] == f'Only {ch1_name}']['Size'].median()
+                    med_size_c2 = morph_df[morph_df['Group'] == f'Only {ch2_name}']['Size'].median()
                     med_size_coloc = morph_df[morph_df['Group'] == 'Colocalized']['Size'].median()
                     
                     med_size_c1 = med_size_c1 if pd.notna(med_size_c1) else 0
@@ -1362,20 +1371,38 @@ else:
                     avg_single_size = (med_size_c1 + med_size_c2) / 2
                     size_ratio = med_size_coloc / avg_single_size if avg_single_size > 0 else 1
                     
-                    # Grade the Size Shift
                     if size_ratio >= 1.2:
-                        size_score = "🔴 Shift Detected"
-                        size_exp = "Colocalized particles have a notably larger hydrodynamic diameter. The dual-labeling may be inducing aggregation, or the dyes are selectively binding to larger particles in the overall population."
+                        size_score, size_exp = "🔴 Shift Detected", "Colocalized particles have a notably larger hydrodynamic diameter. The dual-labeling may be inducing aggregation, or the dyes are selectively binding to larger particles in the overall population."
                     else:
-                        size_score = "🟢 Consistent Size"
-                        size_exp = "Dual-labeled particles share a nearly identical hydrodynamic size with single-labeled particles, confirming that dual-labeling does not severely alter their physical profile."
+                        size_score, size_exp = "🟢 Consistent Size", "Dual-labeled particles share a nearly identical hydrodynamic size with single-labeled particles, confirming that dual-labeling does not severely alter their physical profile."
 
                     st.markdown("**2. Hydrodynamic Size Shift**")
                     size_cols = st.columns(4)
-                    size_cols[0].metric("C1 Median Size", f"{round(med_size_c1, 1)} nm")
-                    size_cols[1].metric("C2 Median Size", f"{round(med_size_c2, 1)} nm")
+                    size_cols[0].metric(f"{ch1_name} Median Size", f"{round(med_size_c1, 1)} nm")
+                    size_cols[1].metric(f"{ch2_name} Median Size", f"{round(med_size_c2, 1)} nm")
                     size_cols[2].metric("Coloc. Median Size", f"{round(med_size_coloc, 1)} nm")
                     size_cols[3].metric("Size Status", size_score)
                     st.info(f"**Interpretation:** {size_exp}")
-
+                    
+                    # --- NEW: QC Data Export ---
+                    qc_data = {
+                        "Metric": [
+                            "Pearson Correlation (r)", "R-squared (R²)", "Correlation Quality", "Correlation Interpretation",
+                            f"{ch1_name} Median Area", f"{ch2_name} Median Area", "Colocalized Area", "Aggregation Status", "Aggregation Interpretation",
+                            f"{ch1_name} Median Size (nm)", f"{ch2_name} Median Size (nm)", "Colocalized Median Size (nm)", "Size Status", "Size Interpretation"
+                        ],
+                        "Value": [
+                            round(r_val, 3), round(r_sq, 3), score, exp,
+                            round(med_area_c1, 1), round(med_area_c2, 1), round(med_area_coloc, 1), area_score, area_exp,
+                            round(med_size_c1, 1), round(med_size_c2, 1), round(med_size_coloc, 1), size_score, size_exp
+                        ]
+                    }
+                    
+                    qc_csv = pd.DataFrame(qc_data).to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Download QC Summary (CSV/Excel)",
+                        data=qc_csv,
+                        file_name=f"QC_Summary_{item['label'].replace(' ', '_')}.csv",
+                        mime="text/csv"
+                    )
                     st.markdown("---")
