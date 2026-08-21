@@ -16,10 +16,10 @@ st.set_page_config(page_title="ZetaSphere Multi-Sample Web Analyzer", layout="wi
 
 DEFAULT_CHANNELS = {
     '488s': ('Scatter', '#808080'),
-    '405f410.lp': ('405 nm', '#4169E1'),
-    '488f500.lp': ('488 nm', '#228B22'),
-    '520f550.lp': ('520 nm', '#FF4500'),
-    '640f660.lp': ('640 nm', '#C71585')
+    '405': ('405 nm', '#4169E1'), # Royal Blue emission
+    '488': ('488 nm', '#228B22'), # Forest Green emission
+    '520': ('520 nm', '#FF4500'), # Orange-Red emission
+    '640': ('640 nm', '#C71585')  # Pinkish/Medium-Violet-Red emission
 }
 
 PALETTES = {
@@ -1034,6 +1034,9 @@ else:
             if not active_coloc_items:
                 st.info("No active Colocalization data to plot.")
             else:
+                # --- NEW: Tab 5 Override Checkbox ---
+                use_palette_t5 = st.checkbox("Override default colors with sidebar palette", key="tab5_color_override")
+                
                 coloc_summary = []
                 plot_data_list = []  # Stores data to generate the master grid later
                 cols = st.columns(3)
@@ -1053,9 +1056,17 @@ else:
                         
                         ch1_name = found[0][1] if len(found) >= 1 else "Channel 1"
                         ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
-                        ch1_color = found[0][2] if len(found) >= 1 else "#0000FF"
-                        ch2_color = found[1][2] if len(found) >= 2 else "#008000"
-                        coloc_color = "#FFD700" 
+                        
+                        # --- NEW: Conditional Color Logic ---
+                        if use_palette_t5:
+                            ch1_color = PALETTES[palette_choice][0 % len(PALETTES[palette_choice])]
+                            ch2_color = PALETTES[palette_choice][1 % len(PALETTES[palette_choice])]
+                            coloc_color = PALETTES[palette_choice][2 % len(PALETTES[palette_choice])]
+                        else:
+                            # Uses the updated emission colors, defaulting to Royal Blue/Forest Green if missing
+                            ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
+                            ch2_color = found[1][2] if len(found) >= 2 else "#228B22"
+                            coloc_color = "#FFD700"
                         
                         is_coloc = df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0'])
                         
@@ -1176,6 +1187,7 @@ else:
             if not active_coloc_items:
                 st.info("No active Colocalization data to plot.")
             else:
+                use_palette_t6 = st.checkbox("Override default colors with sidebar palette", key="tab6_color_override")
                 for idx, item in enumerate(active_coloc_items):
                     df = item['df'].copy()
                     
@@ -1262,9 +1274,16 @@ else:
                     
                     ch1_name = found[0][1] if len(found) >= 1 else "Channel 1"
                     ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
-                    ch1_color = found[0][2] if len(found) >= 1 else "#0000FF"
-                    ch2_color = found[1][2] if len(found) >= 2 else "#008000"
-                    coloc_color = "#FFD700" 
+                    
+                    if use_palette_t6:
+                        ch1_color = PALETTES[palette_choice][0 % len(PALETTES[palette_choice])]
+                        ch2_color = PALETTES[palette_choice][1 % len(PALETTES[palette_choice])]
+                        coloc_color = PALETTES[palette_choice][2 % len(PALETTES[palette_choice])]
+                    else:
+                        ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
+                        ch2_color = found[1][2] if len(found) >= 2 else "#228B22"
+                        coloc_color = "#FFD700" 
+                        
                     palette_colors = [ch1_color, ch2_color, coloc_color]
 
                     # Data Prep for Morphology & Size
