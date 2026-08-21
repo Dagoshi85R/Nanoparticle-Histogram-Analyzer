@@ -1228,6 +1228,7 @@ else:
                                     'C2_Intensity': c2_data.iloc[min_idx][int_col],
                                     'Colocalized_Area': (c1_data.iloc[i][area_col] + c2_data.iloc[min_idx][area_col]) / 2,
                                     'Colocalized_AR': (c1_data.iloc[i][ar_col] + c2_data.iloc[min_idx][ar_col]) / 2,
+                                    'Colocalized_Size': (c1_data.iloc[i][size_col] + c2_data.iloc[min_idx][size_col]) / 2
                                 })
                                 
                     matched_df = pd.DataFrame(matched_pairs)
@@ -1252,8 +1253,8 @@ else:
                     
                     morph_df = pd.DataFrame({
                         'Group': ['Only C1']*len(single_c1) + ['Only C2']*len(single_c2) + ['Colocalized']*len(matched_df),
-                        'Area': pd.concat([single_c1[area_col], single_c2[area_col], matched_df['Colocalized_Area']]),
-                        'Size': pd.concat([single_c1[size_col], single_c2[size_col], df[df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0'])][size_col]])
+                        'Area': pd.concat([single_c1[area_col], single_c2[area_col], matched_df['Colocalized_Area']], ignore_index=True),
+                        'Size': pd.concat([single_c1[size_col], single_c2[size_col], matched_df['Colocalized_Size']], ignore_index=True)
                     })
                     
                     # Plot 2: Aggregation Check (Boxplot for Area)
