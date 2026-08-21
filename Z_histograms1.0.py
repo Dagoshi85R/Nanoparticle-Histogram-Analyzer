@@ -16,10 +16,10 @@ st.set_page_config(page_title="ZetaSphere Multi-Sample Web Analyzer", layout="wi
 
 DEFAULT_CHANNELS = {
     '488s': ('Scatter', '#808080'),
-    '405f410.lp': ('405 nm', '#800080'),
-    '488f500.lp': ('488 nm', '#0000FF'),
-    '520f550.lp': ('520 nm', '#008000'),
-    '640f660.lp': ('640 nm', '#FF0000')
+    '405f410.lp': ('405 nm', '#4169E1'),
+    '488f500.lp': ('488 nm', '#228B22'),
+    '520f550.lp': ('520 nm', '#FF4500'),
+    '640f660.lp': ('640 nm', '#C71585')
 }
 
 PALETTES = {
