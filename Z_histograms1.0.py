@@ -79,12 +79,12 @@ with st.sidebar:
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
 
     st.markdown("---")
-        st.subheader("Data Filtering")
-        min_trace_length = st.slider(
-            "Minimum Trace Length (Frames)", 
-            min_value=1, max_value=50, value=1, step=1, 
-            help="Filter out particles tracked for too few frames."
-        )
+    st.subheader("Data Filtering")
+    min_trace_length = st.slider(
+        "Minimum Trace Length (Frames)", 
+        min_value=1, max_value=50, value=1, step=1, 
+        help="Filter out particles tracked for too few frames."
+    )
 
     st.markdown("---")
     st.subheader("Advanced Colocalization")
