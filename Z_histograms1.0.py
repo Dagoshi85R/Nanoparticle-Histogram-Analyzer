@@ -79,25 +79,25 @@ with st.sidebar:
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
 
     st.markdown("---")
-        st.subheader("Advanced Data Filtering")
-        expert_filtering = st.checkbox("Filtering data - experts only")
+    st.subheader("Advanced Data Filtering")
+    expert_filtering = st.checkbox("Filtering data - experts only")
         
-        if expert_filtering:
-            min_trace_length = st.slider(
-                "Minimum Trace Length (Frames)", 
-                min_value=1, max_value=50, value=1, step=1, 
-                help="Filter out particles tracked for too few frames."
-            )
-            st.info("💡 **Note:** The manufacturer recommended link radius is 10 pixels.")
-            link_radius = st.slider(
-                "Link Radius (Pixels)", 
-                min_value=1.0, max_value=30.0, value=10.0, step=1.0, 
-                help="The spatial tolerance used to match moving particles between the two consecutive laser recordings."
-            )
-        else:
-            # Safe defaults when hidden
-            min_trace_length = 1
-            link_radius = 10.0
+    if expert_filtering:
+        min_trace_length = st.slider(
+            "Minimum Trace Length (Frames)", 
+            min_value=1, max_value=50, value=1, step=1, 
+            help="Filter out particles tracked for too few frames."
+        )
+        st.info("💡 **Note:** The manufacturer recommended link radius is 10 pixels.")
+        link_radius = st.slider(
+            "Link Radius (Pixels)", 
+            min_value=1.0, max_value=30.0, value=10.0, step=1.0, 
+            help="The spatial tolerance used to match moving particles between the two consecutive laser recordings."
+        )
+    else:
+        # Safe defaults when hidden
+        min_trace_length = 1
+        link_radius = 10.0
 
 # --- Helper Functions ---
 def parse_file_info(uploaded_file):
@@ -1293,7 +1293,7 @@ else:
                         
                     plt.tight_layout()
                     st.pyplot(fig)
-                    
+
                     # --- NEW: Stoichiometry Statistics & Scoring ---
                     # Calculate Pearson correlation (r) and R-squared
                     r_val = matched_df['C1_Intensity'].corr(matched_df['C2_Intensity'])
