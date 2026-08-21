@@ -1059,9 +1059,11 @@ else:
                         
                         # --- NEW: Conditional Color Logic ---
                         if use_palette_t5:
-                            ch1_color = PALETTES[palette_choice][0 % len(PALETTES[palette_choice])]
-                            ch2_color = PALETTES[palette_choice][1 % len(PALETTES[palette_choice])]
-                            coloc_color = PALETTES[palette_choice][2 % len(PALETTES[palette_choice])]
+                            # Safely extract exactly 3 hex colors from the chosen seaborn palette
+                            custom_colors = sns.color_palette(palette_choice, 3).as_hex()
+                            ch1_color = custom_colors[0]
+                            ch2_color = custom_colors[1]
+                            coloc_color = custom_colors[2]
                         else:
                             # Uses the updated emission colors, defaulting to Royal Blue/Forest Green if missing
                             ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
@@ -1276,13 +1278,14 @@ else:
                     ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
                     
                     if use_palette_t6:
-                        ch1_color = PALETTES[palette_choice][0 % len(PALETTES[palette_choice])]
-                        ch2_color = PALETTES[palette_choice][1 % len(PALETTES[palette_choice])]
-                        coloc_color = PALETTES[palette_choice][2 % len(PALETTES[palette_choice])]
+                        custom_colors = sns.color_palette(palette_choice, 3).as_hex()
+                        ch1_color = custom_colors[0]
+                        ch2_color = custom_colors[1]
+                        coloc_color = custom_colors[2]
                     else:
                         ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
                         ch2_color = found[1][2] if len(found) >= 2 else "#228B22"
-                        coloc_color = "#FFD700" 
+                        coloc_color = "#FFD700"
                         
                     palette_colors = [ch1_color, ch2_color, coloc_color]
 
