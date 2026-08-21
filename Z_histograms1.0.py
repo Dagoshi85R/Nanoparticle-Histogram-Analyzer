@@ -1057,16 +1057,34 @@ else:
                         ch1_name = found[0][1] if len(found) >= 1 else "Channel 1"
                         ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
                         
-                        # --- NEW: Conditional Color Logic ---
+                        # --- NEW: Fail-Safe Conditional Color Logic ---
                         if use_palette_t5:
-                            import matplotlib.colors as mcolors
-                            cmap = PALETTES[palette_choice]
-                            # Sample 3 distinct points along the colormap gradient (15%, 55%, 85%)
-                            ch1_color = mcolors.to_hex(cmap(0.15))
-                            ch2_color = mcolors.to_hex(cmap(0.55))
-                            coloc_color = mcolors.to_hex(cmap(0.85))
+                            try:
+                                import matplotlib.colors as mcolors
+                                palette_obj = PALETTES[palette_choice]
+                                
+                                # Case 1: It's a list or tuple of colors
+                                if isinstance(palette_obj, (list, tuple)):
+                                    ch1_color = mcolors.to_hex(palette_obj[0 % len(palette_obj)])
+                                    ch2_color = mcolors.to_hex(palette_obj[1 % len(palette_obj)])
+                                    coloc_color = mcolors.to_hex(palette_obj[2 % len(palette_obj)])
+                                # Case 2: It has a .colors attribute (ListedColormap)
+                                elif hasattr(palette_obj, 'colors'):
+                                    ch1_color = mcolors.to_hex(palette_obj.colors[0 % len(palette_obj.colors)])
+                                    ch2_color = mcolors.to_hex(palette_obj.colors[1 % len(palette_obj.colors)])
+                                    coloc_color = mcolors.to_hex(palette_obj.colors[2 % len(palette_obj.colors)])
+                                # Case 3: It's callable (LinearSegmentedColormap)
+                                else:
+                                    ch1_color = mcolors.to_hex(palette_obj(0.15))
+                                    ch2_color = mcolors.to_hex(palette_obj(0.55))
+                                    coloc_color = mcolors.to_hex(palette_obj(0.85))
+                            except Exception:
+                                # Ultimate safety net: default to emission colors if anything crashes
+                                ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
+                                ch2_color = found[1][2] if len(found) >= 2 else "#228B22"
+                                coloc_color = "#FFD700" 
                         else:
-                            # Uses the updated emission colors, defaulting to Royal Blue/Forest Green if missing
+                            # Uses the updated emission colors
                             ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
                             ch2_color = found[1][2] if len(found) >= 2 else "#228B22"
                             coloc_color = "#FFD700"
@@ -1279,12 +1297,26 @@ else:
                     ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
                     
                     if use_palette_t6:
-                        import matplotlib.colors as mcolors
-                        cmap = PALETTES[palette_choice]
-                        # Sample 3 distinct points along the colormap gradient (15%, 55%, 85%)
-                        ch1_color = mcolors.to_hex(cmap(0.15))
-                        ch2_color = mcolors.to_hex(cmap(0.55))
-                        coloc_color = mcolors.to_hex(cmap(0.85))
+                        try:
+                            import matplotlib.colors as mcolors
+                            palette_obj = PALETTES[palette_choice]
+                            
+                            if isinstance(palette_obj, (list, tuple)):
+                                ch1_color = mcolors.to_hex(palette_obj[0 % len(palette_obj)])
+                                ch2_color = mcolors.to_hex(palette_obj[1 % len(palette_obj)])
+                                coloc_color = mcolors.to_hex(palette_obj[2 % len(palette_obj)])
+                            elif hasattr(palette_obj, 'colors'):
+                                ch1_color = mcolors.to_hex(palette_obj.colors[0 % len(palette_obj.colors)])
+                                ch2_color = mcolors.to_hex(palette_obj.colors[1 % len(palette_obj.colors)])
+                                coloc_color = mcolors.to_hex(palette_obj.colors[2 % len(palette_obj.colors)])
+                            else:
+                                ch1_color = mcolors.to_hex(palette_obj(0.15))
+                                ch2_color = mcolors.to_hex(palette_obj(0.55))
+                                coloc_color = mcolors.to_hex(palette_obj(0.85))
+                        except Exception:
+                            ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
+                            ch2_color = found[1][2] if len(found) >= 2 else "#228B22"
+                            coloc_color = "#FFD700"
                     else:
                         ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
                         ch2_color = found[1][2] if len(found) >= 2 else "#228B22"
