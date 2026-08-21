@@ -1238,14 +1238,17 @@ else:
                         continue
                         
                     # Create the 3-panel plotting grid
-                    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 5))
+                    # Dynamically adapt to global figure sizing (assuming 3 panels wide)
+                    w = (fig_width * 3) if 'fig_width' in locals() else 18
+                    h = fig_height if 'fig_height' in locals() else 5
+                    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(w, h))
                     fig.patch.set_facecolor(bg_color)
                     
                     # Plot 1: Intensity Stoichiometry (Scatter)
-                    sns.regplot(data=matched_df, x='C1_Intensity', y='C2_Intensity', ax=ax1, scatter_kws={'alpha': 0.5}, color='#FFD700')
-                    ax1.set_title("Dye Stoichiometry", color=axes_color, fontweight='bold')
-                    ax1.set_xlabel("Channel 1 Mean Intensity", color=axes_color)
-                    ax1.set_ylabel("Channel 2 Mean Intensity", color=axes_color)
+                    sns.regplot(data=matched_df, x='C1_Intensity', y='C2_Intensity', ax=ax1, scatter_kws={'alpha': 0.5}, color='#FFD700', line_kws={'linewidth': axes_width})
+                    ax1.set_title("Dye Stoichiometry", color=axes_color, fontweight='bold', fontsize=title_size)
+                    ax1.set_xlabel("Channel 1 Mean Intensity", color=axes_color, fontsize=label_size)
+                    ax1.set_ylabel("Channel 2 Mean Intensity", color=axes_color, fontsize=label_size)
                     
                     # Data Prep for Morphology & Size
                     single_c1 = df[(df[ch_col] == ch1_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
@@ -1258,21 +1261,36 @@ else:
                     })
                     
                     # Plot 2: Aggregation Check (Boxplot for Area)
-                    sns.boxplot(data=morph_df, x='Group', y='Area', ax=ax2, palette=["#0000FF", "#008000", "#FFD700"])
-                    ax2.set_title("Aggregation Check (Area)", color=axes_color, fontweight='bold')
-                    ax2.set_ylabel("Mean Area", color=axes_color)
-                    ax2.set_xlabel("")
+                    sns.boxplot(data=morph_df, x='Group', y='Area', ax=ax2, palette=["#0000FF", "#008000", "#FFD700"], linewidth=axes_width)
+                    ax2.set_title("Aggregation Check (Area)", color=axes_color, fontweight='bold', fontsize=title_size)
+                    ax2.set_ylabel("Mean Area", color=axes_color, fontsize=label_size)
+                    ax2.set_xlabel("", fontsize=label_size)
                     
                     # Plot 3: Hydrodynamic Size Shift (KDE)
-                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax3, fill=True, palette=["#0000FF", "#008000", "#FFD700"], alpha=0.3)
-                    ax3.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold')
-                    ax3.set_xlabel("Particle Size (nm)", color=axes_color)
+                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax3, fill=True, palette=["#0000FF", "#008000", "#FFD700"], alpha=0.3, linewidth=axes_width)
+                    ax3.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
+                    ax3.set_xlabel("Particle Size (nm)", color=axes_color, fontsize=label_size)
+                    ax3.set_ylabel("Density", color=axes_color, fontsize=label_size)
                     
-                    # Polish axes
+                    # Polish axes and typography
                     for ax in [ax1, ax2, ax3]:
-                        ax.tick_params(colors=axes_color)
-                        for spine in ax.spines.values(): spine.set_color(axes_color)
+                        ax.tick_params(colors=axes_color, labelsize=label_size, width=axes_width)
+                        for spine in ax.spines.values(): 
+                            spine.set_color(axes_color)
+                            spine.set_linewidth(axes_width)
                         ax.set_facecolor(bg_color)
+                        
+                        # Style the legend if it exists (KDE plot)
+                        legend = ax.get_legend()
+                        if legend is not None:
+                            plt.setp(legend.get_texts(), color=axes_color, fontsize=label_size)
+                            plt.setp(legend.get_title(), color=axes_color, fontsize=label_size, fontweight='bold')
+                            legend.get_frame().set_facecolor(bg_color)
+                            legend.get_frame().set_edgecolor(axes_color)
+                            legend.get_frame().set_linewidth(axes_width)
+                            
+                    plt.tight_layout()
+                    st.pyplot(fig)
                         
                     plt.tight_layout()
                     st.pyplot(fig)
@@ -1359,5 +1377,5 @@ else:
                     size_cols[2].metric("Coloc. Median Size", f"{round(med_size_coloc, 1)} nm")
                     size_cols[3].metric("Size Status", size_score)
                     st.info(f"**Interpretation:** {size_exp}")
-                    
+
                     st.markdown("---")
