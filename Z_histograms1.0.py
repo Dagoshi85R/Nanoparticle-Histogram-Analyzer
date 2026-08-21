@@ -79,25 +79,25 @@ with st.sidebar:
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
 
     st.markdown("---")
-    st.subheader("Data Filtering")
-    min_trace_length = st.slider(
-        "Minimum Trace Length (Frames)", 
-        min_value=1, max_value=50, value=1, step=1, 
-        help="Filter out particles tracked for too few frames."
-    )
-
-    st.markdown("---")
-    st.subheader("Advanced Colocalization")
-    show_link_radius = st.checkbox("Modify Link Radius")
-    if show_link_radius:
-        st.info("💡 **Note:** The manufacturer recommended setting is 10 pixels.")
-        link_radius = st.slider(
-            "Link Radius (Pixels)", 
-            min_value=1.0, max_value=30.0, value=10.0, step=1.0, 
-            help="The spatial tolerance used to match moving particles between the two consecutive laser recordings."
-        )
-    else:
-        link_radius = 10.0
+        st.subheader("Advanced Data Filtering")
+        expert_filtering = st.checkbox("Filtering data - experts only")
+        
+        if expert_filtering:
+            min_trace_length = st.slider(
+                "Minimum Trace Length (Frames)", 
+                min_value=1, max_value=50, value=1, step=1, 
+                help="Filter out particles tracked for too few frames."
+            )
+            st.info("💡 **Note:** The manufacturer recommended link radius is 10 pixels.")
+            link_radius = st.slider(
+                "Link Radius (Pixels)", 
+                min_value=1.0, max_value=30.0, value=10.0, step=1.0, 
+                help="The spatial tolerance used to match moving particles between the two consecutive laser recordings."
+            )
+        else:
+            # Safe defaults when hidden
+            min_trace_length = 1
+            link_radius = 10.0
 
 # --- Helper Functions ---
 def parse_file_info(uploaded_file):
@@ -1238,14 +1238,16 @@ else:
                         continue
                         
                     # Create the 3-panel plotting grid
-                    # Dynamically adapt to global figure sizing (assuming 3 panels wide)
                     w = (fig_width * 3) if 'fig_width' in locals() else 18
                     h = fig_height if 'fig_height' in locals() else 5
                     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(w, h))
                     fig.patch.set_facecolor(bg_color)
                     
+                    # Safely handle legend size if it exists in your sidebar
+                    leg_size = legend_size if 'legend_size' in locals() else label_size
+                    
                     # Plot 1: Intensity Stoichiometry (Scatter)
-                    sns.regplot(data=matched_df, x='C1_Intensity', y='C2_Intensity', ax=ax1, scatter_kws={'alpha': 0.5}, color='#FFD700', line_kws={'linewidth': axes_width})
+                    sns.regplot(data=matched_df, x='C1_Intensity', y='C2_Intensity', ax=ax1, scatter_kws={'alpha': 0.5}, color='#FFD700', line_kws={'linewidth': line_width})
                     ax1.set_title("Dye Stoichiometry", color=axes_color, fontweight='bold', fontsize=title_size)
                     ax1.set_xlabel("Channel 1 Mean Intensity", color=axes_color, fontsize=label_size)
                     ax1.set_ylabel("Channel 2 Mean Intensity", color=axes_color, fontsize=label_size)
@@ -1261,13 +1263,13 @@ else:
                     })
                     
                     # Plot 2: Aggregation Check (Boxplot for Area)
-                    sns.boxplot(data=morph_df, x='Group', y='Area', ax=ax2, palette=["#0000FF", "#008000", "#FFD700"], linewidth=axes_width)
+                    sns.boxplot(data=morph_df, x='Group', y='Area', ax=ax2, palette=["#0000FF", "#008000", "#FFD700"], linewidth=line_width)
                     ax2.set_title("Aggregation Check (Area)", color=axes_color, fontweight='bold', fontsize=title_size)
                     ax2.set_ylabel("Mean Area", color=axes_color, fontsize=label_size)
                     ax2.set_xlabel("", fontsize=label_size)
                     
                     # Plot 3: Hydrodynamic Size Shift (KDE)
-                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax3, fill=True, palette=["#0000FF", "#008000", "#FFD700"], alpha=0.3, linewidth=axes_width)
+                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax3, fill=True, palette=["#0000FF", "#008000", "#FFD700"], alpha=0.3, linewidth=line_width)
                     ax3.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
                     ax3.set_xlabel("Particle Size (nm)", color=axes_color, fontsize=label_size)
                     ax3.set_ylabel("Density", color=axes_color, fontsize=label_size)
@@ -1280,20 +1282,18 @@ else:
                             spine.set_linewidth(axes_width)
                         ax.set_facecolor(bg_color)
                         
-                        # Style the legend if it exists (KDE plot)
+                        # Style the legend for the KDE plot
                         legend = ax.get_legend()
                         if legend is not None:
-                            plt.setp(legend.get_texts(), color=axes_color, fontsize=label_size)
-                            plt.setp(legend.get_title(), color=axes_color, fontsize=label_size, fontweight='bold')
+                            plt.setp(legend.get_texts(), color=axes_color, fontsize=leg_size)
+                            plt.setp(legend.get_title(), color=axes_color, fontsize=leg_size, fontweight='bold')
                             legend.get_frame().set_facecolor(bg_color)
                             legend.get_frame().set_edgecolor(axes_color)
                             legend.get_frame().set_linewidth(axes_width)
-                            
-                    plt.tight_layout()
-                    st.pyplot(fig)
                         
                     plt.tight_layout()
                     st.pyplot(fig)
+                    
                     # --- NEW: Stoichiometry Statistics & Scoring ---
                     # Calculate Pearson correlation (r) and R-squared
                     r_val = matched_df['C1_Intensity'].corr(matched_df['C2_Intensity'])
