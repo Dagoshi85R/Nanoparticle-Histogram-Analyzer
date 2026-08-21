@@ -1276,4 +1276,26 @@ else:
                         
                     plt.tight_layout()
                     st.pyplot(fig)
+                    # --- NEW: Stoichiometry Statistics & Scoring ---
+                    # Calculate Pearson correlation (r) and R-squared
+                    r_val = matched_df['C1_Intensity'].corr(matched_df['C2_Intensity'])
+                    r_sq = r_val ** 2
+                    
+                    # Determine Correlation Quality Score
+                    if r_val >= 0.7:
+                        score = "🟢 Strong (Good)"
+                        exp = "A high score indicates proportional binding. For TetraSpeck beads, this proves the fluorophores are evenly distributed on the particles. In biological samples, this suggests target receptors are expressed at constant ratios."
+                    elif r_val >= 0.4:
+                        score = "🟡 Moderate (Medium)"
+                        exp = "A medium score suggests some proportional binding, but with significant variation. Beads might be photobleaching unevenly, or biological targets have variable expression."
+                    else:
+                        score = "🔴 Weak (Bad)"
+                        exp = "A low score means the intensities are independent. Binding is random. For TetraSpeck beads, this indicates severe degradation, photobleaching, or measurement noise."
+
+                    st.markdown("### 📈 Stoichiometry Statistical Summary")
+                    stat_cols = st.columns(3)
+                    stat_cols[0].metric("Pearson Correlation (r)", round(r_val, 3))
+                    stat_cols[1].metric("R-squared (R²)", round(r_sq, 3))
+                    stat_cols[2].metric("Correlation Quality", score)
+                    st.info(f"**Interpretation:** {exp}")
                     st.markdown("---")
