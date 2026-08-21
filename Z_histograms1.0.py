@@ -1298,4 +1298,66 @@ else:
                     stat_cols[1].metric("R-squared (R²)", round(r_sq, 3))
                     stat_cols[2].metric("Correlation Quality", score)
                     st.info(f"**Interpretation:** {exp}")
+                    
+                    # --- NEW: Morphology & Size Statistics ---
+                    st.markdown("### 🔬 Aggregation & Size Summary")
+                    
+                    # 1. Calculate Medians for Area (Aggregation Check)
+                    med_area_c1 = morph_df[morph_df['Group'] == 'Only C1']['Area'].median()
+                    med_area_c2 = morph_df[morph_df['Group'] == 'Only C2']['Area'].median()
+                    med_area_coloc = morph_df[morph_df['Group'] == 'Colocalized']['Area'].median()
+                    
+                    # Safety check for empty groups
+                    med_area_c1 = med_area_c1 if pd.notna(med_area_c1) else 0
+                    med_area_c2 = med_area_c2 if pd.notna(med_area_c2) else 0
+                    
+                    avg_single_area = (med_area_c1 + med_area_c2) / 2
+                    area_ratio = med_area_coloc / avg_single_area if avg_single_area > 0 else 1
+                    
+                    # Grade the Aggregation Risk
+                    if area_ratio >= 1.5:
+                        area_score = "🔴 High Risk"
+                        area_exp = "Colocalized particles have a significantly larger cross-sectional area (≥50% bigger) than single-positive particles. This strongly suggests physical clumping (doublets/aggregates) rather than true single-particle colocalization."
+                    elif area_ratio >= 1.2:
+                        area_score = "🟡 Moderate Risk"
+                        area_exp = "Colocalized particles are slightly larger on average, indicating a possible mix of true colocalized events and some small aggregates."
+                    else:
+                        area_score = "🟢 Low Risk"
+                        area_exp = "The optical areas are highly comparable. Colocalized particles maintain a single-particle optical profile, confirming high-quality colocalization without clumping."
+
+                    st.markdown("**1. Aggregation Check (Area)**")
+                    area_cols = st.columns(4)
+                    area_cols[0].metric("C1 Median Area", round(med_area_c1, 1))
+                    area_cols[1].metric("C2 Median Area", round(med_area_c2, 1))
+                    area_cols[2].metric("Colocalized Area", round(med_area_coloc, 1))
+                    area_cols[3].metric("Aggregation Status", area_score)
+                    st.info(f"**Interpretation:** {area_exp}")
+
+                    # 2. Calculate Medians for Hydrodynamic Size
+                    med_size_c1 = morph_df[morph_df['Group'] == 'Only C1']['Size'].median()
+                    med_size_c2 = morph_df[morph_df['Group'] == 'Only C2']['Size'].median()
+                    med_size_coloc = morph_df[morph_df['Group'] == 'Colocalized']['Size'].median()
+                    
+                    med_size_c1 = med_size_c1 if pd.notna(med_size_c1) else 0
+                    med_size_c2 = med_size_c2 if pd.notna(med_size_c2) else 0
+                    
+                    avg_single_size = (med_size_c1 + med_size_c2) / 2
+                    size_ratio = med_size_coloc / avg_single_size if avg_single_size > 0 else 1
+                    
+                    # Grade the Size Shift
+                    if size_ratio >= 1.2:
+                        size_score = "🔴 Shift Detected"
+                        size_exp = "Colocalized particles have a notably larger hydrodynamic diameter. The dual-labeling may be inducing aggregation, or the dyes are selectively binding to larger particles in the overall population."
+                    else:
+                        size_score = "🟢 Consistent Size"
+                        size_exp = "Dual-labeled particles share a nearly identical hydrodynamic size with single-labeled particles, confirming that dual-labeling does not severely alter their physical profile."
+
+                    st.markdown("**2. Hydrodynamic Size Shift**")
+                    size_cols = st.columns(4)
+                    size_cols[0].metric("C1 Median Size", f"{round(med_size_c1, 1)} nm")
+                    size_cols[1].metric("C2 Median Size", f"{round(med_size_c2, 1)} nm")
+                    size_cols[2].metric("Coloc. Median Size", f"{round(med_size_coloc, 1)} nm")
+                    size_cols[3].metric("Size Status", size_score)
+                    st.info(f"**Interpretation:** {size_exp}")
+                    
                     st.markdown("---")
