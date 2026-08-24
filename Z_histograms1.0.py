@@ -1138,17 +1138,23 @@ else:
                         fig, ax = plt.subplots(figsize=(6, 5) if show_legend else (5, 5))
                         fig.patch.set_facecolor(bg_color)
                         
+                        # Safely define legend size
+                        leg_size = legend_size if 'legend_size' in locals() else label_size
+
                         # Swap external text for a legend if the user has requested it
                         pie_labels = None if show_legend else plot_labels
                         
                         wedges, texts, autotexts = ax.pie(
                             plot_sizes, labels=pie_labels, autopct='%1.1f%%', colors=plot_colors, 
                             startangle=140, textprops={'color': axes_color, 'fontsize': label_size}, 
-                            wedgeprops={'edgecolor': axes_color, 'linewidth': axes_width}
+                            # --- FIXED: Use line_width instead of axes_width for pie slices ---
+                            wedgeprops={'edgecolor': axes_color, 'linewidth': line_width}
                         )
                         
                         if show_legend:
-                            ax.legend(wedges, plot_labels, loc="center left", bbox_to_anchor=(1, 0.5), facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color)
+                            # --- FIXED: Inject leg_size into the legend and axes_width to its frame ---
+                            legend = ax.legend(wedges, plot_labels, loc="center left", bbox_to_anchor=(1, 0.5), facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color, fontsize=leg_size)
+                            legend.get_frame().set_linewidth(axes_width)
                             
                         ax.set_title(item['label'], color=axes_color, fontweight='bold', fontsize=title_size)
                         
@@ -1185,6 +1191,9 @@ else:
                     fig_master = plt.figure(figsize=(master_width, 5 * rows_grid))
                     fig_master.patch.set_facecolor(bg_color)
                     
+                    # Safely define legend size for master grid too
+                    leg_size = legend_size if 'legend_size' in locals() else label_size
+                    
                     for i, p_data in enumerate(plot_data_list):
                         ax_m = fig_master.add_subplot(rows_grid, cols_grid, i + 1)
                         pie_labels_m = None if show_legend else p_data['labels']
@@ -1193,12 +1202,15 @@ else:
                             p_data['sizes'], labels=pie_labels_m, autopct='%1.1f%%', 
                             colors=p_data['colors'], startangle=140, 
                             textprops={'color': axes_color, 'fontsize': label_size},
-                            wedgeprops={'edgecolor': axes_color, 'linewidth': axes_width}
+                            # --- FIXED: Use line_width here too ---
+                            wedgeprops={'edgecolor': axes_color, 'linewidth': line_width}
                         )
                         ax_m.set_title(p_data['title'], color=axes_color, fontweight='bold', fontsize=title_size)
                         
                         if show_legend:
-                            ax_m.legend(wedges_m, p_data['labels'], loc="center left", bbox_to_anchor=(1, 0.5), facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color)
+                            # --- FIXED: Inject leg_size into the master grid legend ---
+                            legend_m = ax_m.legend(wedges_m, p_data['labels'], loc="center left", bbox_to_anchor=(1, 0.5), facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color, fontsize=leg_size)
+                            legend_m.get_frame().set_linewidth(axes_width)
                     
                     # Ensure legends don't get cut off from the edges of the image
                     plt.tight_layout()
