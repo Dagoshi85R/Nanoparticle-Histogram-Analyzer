@@ -32,6 +32,8 @@ PALETTES = {
     "Colorblind": "colorblind",
     "Inferno": "inferno",
     "Cividis": "cividis",
+    "Rocket": "rocket",
+    "Cubehelix": "cubehelix",
     "Tab10": "tab10",
     "Spectral": "Spectral",
     "Set1": "Set1",
@@ -985,7 +987,21 @@ else:
                                 full_pal = sns.color_palette(palette_name, n_colors=256)
                                 pop_color_dict = {pop: full_pal[int(idx * 255 / max(1, len(pops) - 1))] for idx, pop in enumerate(pops)}
                                 
-                                sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, binrange=(0, gmm_x_max), kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax_sub)
+                                sns.histplot(
+                                    data=res['df'], 
+                                    x=res['feature_col'], 
+                                    hue='Population', 
+                                    palette=pop_color_dict, 
+                                    element='step', 
+                                    binwidth=gmm_bin_width, 
+                                    binrange=(0, gmm_x_max), 
+                                    kde=True, 
+                                    fill=(display_style != "Smooth Curve Only"), 
+                                    alpha=(0.2 if display_style != "Smooth Curve Only" else 0.0), 
+                                    line_kws={'linewidth': line_width}, 
+                                    linewidth=(line_width if display_style != "Smooth Curve Only" else 0), 
+                                    ax=ax_sub
+                                )
                                 
                                 # Add Vertical Markers to Multi-Channel
                                 if central_marker != "None":
