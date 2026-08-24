@@ -1009,15 +1009,18 @@ else:
                                     import matplotlib.lines as mlines
                                     legend = ax_sub.get_legend()
                                     if legend is not None:
+                                        # Force all dictionary keys to strings to guarantee a match
+                                        str_color_dict = {str(k).strip(): v for k, v in pop_color_dict.items()}
+
                                         handles, labels = [], []
                                         for text_obj in legend.get_texts():
-                                            pop_name = text_obj.get_text()
+                                            pop_name = text_obj.get_text().strip()
                                             labels.append(pop_name)
-                                            # Grab the correct color from your dictionary
-                                            color = pop_color_dict.get(pop_name, axes_color)
+                                            # Grab the correct color using the string-matched dictionary
+                                            color = str_color_dict.get(pop_name, axes_color)
                                             handles.append(mlines.Line2D([], [], color=color, linewidth=line_width))
                             
-                                        # Overwrite the invisible legend with our new solid lines
+                                        # Overwrite the invisible legend with our new solid colored lines
                                         ax_sub.legend(handles=handles, labels=labels, title=legend.get_title().get_text())
                                 
                                 # Add Vertical Markers to Multi-Channel
