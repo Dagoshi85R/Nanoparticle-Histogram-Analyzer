@@ -987,6 +987,7 @@ else:
                                 full_pal = sns.color_palette(palette_name, n_colors=256)
                                 pop_color_dict = {pop: full_pal[int(idx * 255 / max(1, len(pops) - 1))] for idx, pop in enumerate(pops)}
                                 
+                                # 1. The Updated Plot Generator
                                 sns.histplot(
                                     data=res['df'], 
                                     x=res['feature_col'], 
@@ -995,13 +996,29 @@ else:
                                     element='step', 
                                     binwidth=gmm_bin_width, 
                                     binrange=(0, gmm_x_max), 
-                                    kde=True, 
+                                    kde=(display_style != "Histogram Only"), # <-- FIXED!
                                     fill=(display_style != "Smooth Curve Only"), 
                                     alpha=(0.2 if display_style != "Smooth Curve Only" else 0.0), 
                                     line_kws={'linewidth': line_width}, 
                                     linewidth=(line_width if display_style != "Smooth Curve Only" else 0), 
                                     ax=ax_sub
                                 )
+                    
+                                # 2. Rebuild the legend for "Smooth Curve Only" so it isn't invisible
+                                if display_style == "Smooth Curve Only":
+                                    import matplotlib.lines as mlines
+                                    legend = ax_sub.get_legend()
+                                    if legend is not None:
+                                        handles, labels = [], []
+                                        for text_obj in legend.get_texts():
+                                            pop_name = text_obj.get_text()
+                                            labels.append(pop_name)
+                                            # Grab the correct color from your dictionary
+                                            color = pop_color_dict.get(pop_name, axes_color)
+                                            handles.append(mlines.Line2D([], [], color=color, linewidth=line_width))
+                            
+                                        # Overwrite the invisible legend with our new solid lines
+                                        ax_sub.legend(handles=handles, labels=labels, title=legend.get_title().get_text())
                                 
                                 # Add Vertical Markers to Multi-Channel
                                 if central_marker != "None":
