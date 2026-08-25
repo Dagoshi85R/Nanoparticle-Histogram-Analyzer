@@ -44,7 +44,7 @@ PALETTES = {
 # --- Sidebar: Upload & Settings ---
 with st.sidebar:
     st.image("logo.png", use_container_width=True)
-    st.title("ZetaSphere Analyzer")
+    st.title("ZetaSphere Histogram Analyzer")
     st.caption("Created by Daniel Gonzalez Silvera. \nImaging Facility, IRR, The University of Edinburgh.\n2026")
     
     st.header("1. Upload Data")
@@ -52,7 +52,7 @@ with st.sidebar:
     
     st.header("2. Display Customization")
     palette_choice = st.selectbox("Color Palette", list(PALETTES.keys()), help="Select a predefined colorset, or use your custom manual colors.")
-    multi_layout = st.radio("Multi-Sample Layout", ["Overlay (Default)", "Facet Grid", "Ridgeline (Joyplot)"], help="Choose how multiple active samples are displayed.")
+    multi_layout = st.radio("Multi-Sample Layout", ["Overlay (Default)", "Facet Grid", "Ridgeline (Joyplot)", "Violin Plot"], help="Choose how multiple active samples are displayed.")
     
     if multi_layout == "Facet Grid":
         facet_share_y = st.checkbox("Share Y-Axis across Facets", value=True, help="Keep all subplots on the exact same vertical scale.")
@@ -468,6 +468,45 @@ else:
                         apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
+                        elif multi_layout == "Violin Plot":
+                        # Prepare data into a single DataFrame for Seaborn
+                        violin_data = []
+                        palette_dict = {}
+                        for ent in entities:
+                            tmp_df = pd.DataFrame({'Size': ent['data'], 'Sample': ent['label']})
+                            violin_data.append(tmp_df)
+                            palette_dict[ent['label']] = ent['color']
+                            
+                        df_violin = pd.concat(violin_data, ignore_index=True)
+                        
+                        # Size the figure dynamically based on the number of samples
+                        fig, ax = plt.subplots(figsize=(10, max(4, len(entities) * 0.8)))
+                        fig.patch.set_facecolor(bg_color)
+                        
+                        # Tie the inner markings to the user's central marker choice
+                        if central_marker == "Median": inner_style = "box"
+                        elif central_marker == "None": inner_style = None
+                        else: inner_style = "quart" # Fallback to quartiles for Mean/Mode
+                        
+                        import seaborn as sns
+                        sns.violinplot(
+                            data=df_violin, 
+                            x='Size', 
+                            y='Sample', 
+                            palette=palette_dict, 
+                            inner=inner_style,
+                            linewidth=line_width,
+                            cut=0, # Prevents the tails from predicting data outside your actual max/min
+                            ax=ax
+                        )
+                        
+                        # Style the axes
+                        ax.set_ylabel("")
+                        ax.tick_params(colors=axes_color, labelsize=label_size)
+                        apply_custom_style(ax, "Violin Plot Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
+                        
+                        st.pyplot(fig)
+                        create_download_buttons(fig, "Size_Distribution_Violin")
 
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Size)")
