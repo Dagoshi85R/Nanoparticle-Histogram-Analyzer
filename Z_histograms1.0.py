@@ -468,7 +468,7 @@ else:
                         apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
-                        
+
                     elif multi_layout == "Violin Plot":
                         # Prepare data into a single DataFrame for Seaborn
                         violin_data = []
@@ -480,8 +480,8 @@ else:
                             
                         df_violin = pd.concat(violin_data, ignore_index=True)
                         
-                        # Size the figure dynamically based on the number of samples (Vertical)
-                        fig, ax = plt.subplots(figsize=(max(4, len(entities) * 1.5), 6))
+                        # FIXED: Use a standard landscape width (10) so Streamlit doesn't stretch the height!
+                        fig, ax = plt.subplots(figsize=(10, 6))
                         fig.patch.set_facecolor(bg_color)
                         
                         # Use quartiles for a clean, transparent inner look
@@ -493,12 +493,12 @@ else:
                         import seaborn as sns
                         sns.violinplot(
                             data=df_violin, 
-                            x='Sample', # Swapped to X to make it vertical
-                            y='Size',   # Swapped to Y
+                            x='Sample', 
+                            y='Size',
+                            hue='Sample', # FIXED: Forces proper color mapping and builds legend handles
                             palette=palette_dict, 
                             inner=inner_style,
                             linewidth=line_width,
-                            # 'cut=0' removed so the tails taper naturally!
                             ax=ax
                         )
                         
@@ -509,8 +509,8 @@ else:
                         # Rotate sample names if they are long so they don't overlap
                         plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
                         
-                        # Apply custom styling (passing None for xlim since X is categorical now)
-                        apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=False)
+                        # FIXED: Pass 'show_legend' to the styling function
+                        apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=show_legend)
                         
                         # Limit the Y-axis to your sidebar slider max
                         ax.set_ylim(0, max_x_size)
