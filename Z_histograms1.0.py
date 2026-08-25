@@ -468,6 +468,7 @@ else:
                         apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
+                        
                     elif multi_layout == "Violin Plot":
                         # Prepare data into a single DataFrame for Seaborn
                         violin_data = []
@@ -476,34 +477,43 @@ else:
                             tmp_df = pd.DataFrame({'Size': ent['data'], 'Sample': ent['label']})
                             violin_data.append(tmp_df)
                             palette_dict[ent['label']] = ent['color']
-                        
+                            
                         df_violin = pd.concat(violin_data, ignore_index=True)
-
-                        # Size the figure dynamically based on the number of samples
-                        fig, ax = plt.subplots(figsize=(10, max(4, len(entities) * 0.8)))
+                        
+                        # Size the figure dynamically based on the number of samples (Vertical)
+                        fig, ax = plt.subplots(figsize=(max(4, len(entities) * 1.5), 6))
                         fig.patch.set_facecolor(bg_color)
-
-                        # Tie the inner markings to the user's central marker choice
-                        if central_marker == "Median": inner_style = "box"
-                        elif central_marker == "None": inner_style = None
-                        else: inner_style = "quart" # Fallback to quartiles for Mean/Mode
+                        
+                        # Use quartiles for a clean, transparent inner look
+                        if central_marker in ["Median", "Mean", "Mode"]: 
+                            inner_style = "quart" 
+                        else: 
+                            inner_style = None
                         
                         import seaborn as sns
                         sns.violinplot(
                             data=df_violin, 
-                            x='Size', 
-                            y='Sample', 
+                            x='Sample', # Swapped to X to make it vertical
+                            y='Size',   # Swapped to Y
                             palette=palette_dict, 
                             inner=inner_style,
                             linewidth=line_width,
-                            cut=0, # Prevents the tails from predicting data outside your actual max/min
+                            # 'cut=0' removed so the tails taper naturally!
                             ax=ax
                         )
                         
-                        # Style the axes
-                        ax.set_ylabel("")
+                        # Style the axes for vertical orientation
+                        ax.set_xlabel("")
                         ax.tick_params(colors=axes_color, labelsize=label_size)
-                        apply_custom_style(ax, "Violin Plot Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
+                        
+                        # Rotate sample names if they are long so they don't overlap
+                        plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+                        
+                        # Apply custom styling (passing None for xlim since X is categorical now)
+                        apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=False)
+                        
+                        # Limit the Y-axis to your sidebar slider max
+                        ax.set_ylim(0, max_x_size)
                         
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution_Violin")
