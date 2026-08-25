@@ -468,25 +468,25 @@ else:
                         apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
-                        elif multi_layout == "Violin Plot":
-                            # Prepare data into a single DataFrame for Seaborn
-                            violin_data = []
-                            palette_dict = {}
-                            for ent in entities:
+                    elif multi_layout == "Violin Plot":
+                        # Prepare data into a single DataFrame for Seaborn
+                        violin_data = []
+                        palette_dict = {}
+                        for ent in entities:
                             tmp_df = pd.DataFrame({'Size': ent['data'], 'Sample': ent['label']})
                             violin_data.append(tmp_df)
                             palette_dict[ent['label']] = ent['color']
-                            
-                            df_violin = pd.concat(violin_data, ignore_index=True)
+                        
+                        df_violin = pd.concat(violin_data, ignore_index=True)
 
-                            # Size the figure dynamically based on the number of samples
-                            fig, ax = plt.subplots(figsize=(10, max(4, len(entities) * 0.8)))
-                            fig.patch.set_facecolor(bg_color)
+                        # Size the figure dynamically based on the number of samples
+                        fig, ax = plt.subplots(figsize=(10, max(4, len(entities) * 0.8)))
+                        fig.patch.set_facecolor(bg_color)
 
-                            # Tie the inner markings to the user's central marker choice
-                            if central_marker == "Median": inner_style = "box"
-                            elif central_marker == "None": inner_style = None
-                            else: inner_style = "quart" # Fallback to quartiles for Mean/Mode
+                        # Tie the inner markings to the user's central marker choice
+                        if central_marker == "Median": inner_style = "box"
+                        elif central_marker == "None": inner_style = None
+                        else: inner_style = "quart" # Fallback to quartiles for Mean/Mode
                         
                         import seaborn as sns
                         sns.violinplot(
