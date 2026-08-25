@@ -544,9 +544,6 @@ else:
                         
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution_Violin")
-                        
-                        st.pyplot(fig)
-                        create_download_buttons(fig, "Size_Distribution_Violin")
 
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Size)")
