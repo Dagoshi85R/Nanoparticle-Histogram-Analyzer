@@ -78,7 +78,15 @@ with st.sidebar:
     
     show_grid = st.checkbox("Show Grid Lines", value=False)
     show_legend = st.checkbox("Show Legend", value=True)
+    # --- NEW: Legend Position Control ---
+    legend_position = st.selectbox(
+        "Legend Position", 
+        ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left"],
+        index=0
+    )
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
+    
+    
 
     st.markdown("---")
     st.subheader("Advanced Data Filtering")
@@ -539,7 +547,7 @@ else:
                             legend_patches = [mpatches.Patch(facecolor=ent['color'], edgecolor=axes_color, label=ent['label']) for ent in entities]
                             
                             # Draw it!
-                            leg = ax.legend(handles=legend_patches, facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color, fontsize=leg_size)
+                            leg = ax.legend(handles=legend_patches, loc=legend_position, facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color, fontsize=leg_size)
                             leg.get_frame().set_linewidth(axes_width)
                         
                         st.pyplot(fig)
