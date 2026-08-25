@@ -366,6 +366,34 @@ else:
                         st.write("---")
                     col_idx += 1
 
+# ==========================================
+    # HELP GUIDE SECTION
+    # ==========================================
+    with st.expander("📖 Click here to read the Help Guide & Documentation"):
+        try:
+            import base64
+            # 1. Read the PDF file
+            with open("Help_Guide.pdf", "rb") as f:
+                pdf_data = f.read()
+                
+            # 2. Provide a quick download button at the top
+            st.download_button(
+                label="📥 Download Help Guide (PDF)",
+                data=pdf_data,
+                file_name="ZetaSphere_Help_Guide.pdf",
+                mime="application/pdf"
+            )
+            
+            st.markdown("---")
+            
+            # 3. Embed the PDF directly into the browser
+            base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
+            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
+            st.markdown(pdf_display, unsafe_allow_html=True)
+            
+        except FileNotFoundError:
+            st.warning("⚠️ 'Help_Guide.pdf' was not found in the application folder. Please ensure the file is uploaded.")
+
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Multi-Sample Size", "Zeta Potential", "Concentration", "Population Analysis (GMM)", "Colocalization", "Colocalization Quality"])
 
     # ==========================================
