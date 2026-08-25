@@ -81,7 +81,7 @@ with st.sidebar:
     # --- NEW: Legend Position Control ---
     legend_position = st.selectbox(
         "Legend Position", 
-        ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left"],
+        ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left", "upper center", "lower center"],
         index=0
     )
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
@@ -247,18 +247,28 @@ def apply_custom_style(ax, title, xlabel, ylabel, xlim, bg, fg, grid, draw_legen
     
     # Apply legend formatting
     if draw_legend:
-        leg = ax.get_legend() # Check if Seaborn already made a legend
-        if leg is None:
-            leg = ax.legend(fontsize=legend_size) # If not, create one
-        if leg is not None:
-            for text in leg.get_texts(): 
-                text.set_color(fg)
-                text.set_fontsize(legend_size)
-            if leg.get_title(): 
-                leg.get_title().set_color(fg)
-                leg.get_title().set_fontsize(legend_size)
-            leg.get_frame().set_facecolor(bg)
-            leg.get_frame().set_edgecolor(fg)
+        # Check if there is data to label to avoid the empty square bug
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            # Save the title if Seaborn already created one
+            existing_leg = ax.get_legend()
+            leg_title = existing_leg.get_title().get_text() if existing_leg and existing_leg.get_title() else None
+            
+            # Rebuild the legend in the user's chosen location
+            leg = ax.legend(loc=legend_position, fontsize=legend_size)
+            
+            if leg is not None:
+                if leg_title: 
+                    leg.set_title(leg_title)
+                for text in leg.get_texts(): 
+                    text.set_color(fg)
+                    text.set_fontsize(legend_size)
+                if leg.get_title(): 
+                    leg.get_title().set_color(fg)
+                    leg.get_title().set_fontsize(legend_size)
+                leg.get_frame().set_facecolor(bg)
+                leg.get_frame().set_edgecolor(fg)
+                leg.get_frame().set_linewidth(axes_width)
     else:
         # If "Show Legend" is unchecked, actively delete any existing legends
         if ax.get_legend() is not None:
