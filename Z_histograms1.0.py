@@ -391,9 +391,21 @@ else:
                             if f_col:
                                 entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "color": item['color'], "style": style})
 
+                # --- FIXED: Maximize color contrast for continuous palettes ---
                 if entities and palette_choice != "Custom (Sample Colors)":
-                    hex_colors = sns.color_palette(PALETTES[palette_choice], len(entities)).as_hex()
-                    for i, ent in enumerate(entities): ent["color"] = hex_colors[i]
+                    import matplotlib.colors as mcolors
+                    import matplotlib.cm as cm
+                    try:
+                        cmap = plt.get_cmap(PALETTES[palette_choice])
+                        # Force the colors to stretch from the absolute 0% mark to the 100% mark
+                        color_vals = np.linspace(0, 1, len(entities))
+                        hex_colors = [mcolors.to_hex(cmap(c)) for c in color_vals]
+                    except:
+                        # Fallback for discrete lists of colors
+                        hex_colors = sns.color_palette(PALETTES[palette_choice], len(entities)).as_hex()
+                    
+                    for i, ent in enumerate(entities): 
+                        ent["color"] = hex_colors[i]
 
                 if not entities:
                     st.info("No active data to plot.")
@@ -514,6 +526,24 @@ else:
                         
                         # Limit the Y-axis to your sidebar slider max
                         ax.set_ylim(0, max_x_size)
+                        
+                        # Apply custom styling (Tell it NOT to draw the broken legend)
+                        apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=False)
+                        
+                        # --- FIXED: Manually construct a perfect color-coded legend ---
+                        if show_legend:
+                            import matplotlib.patches as mpatches
+                            leg_size = legend_size if 'legend_size' in locals() else label_size
+                            
+                            # Create a colorful square (patch) for every single sample
+                            legend_patches = [mpatches.Patch(facecolor=ent['color'], edgecolor=axes_color, label=ent['label']) for ent in entities]
+                            
+                            # Draw it!
+                            leg = ax.legend(handles=legend_patches, facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color, fontsize=leg_size)
+                            leg.get_frame().set_linewidth(axes_width)
+                        
+                        st.pyplot(fig)
+                        create_download_buttons(fig, "Size_Distribution_Violin")
                         
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution_Violin")
