@@ -373,7 +373,7 @@ else:
         try:
             import base64
             # 1. Read the PDF file
-            with open("Help_Guide.pdf", "rb") as f:
+            with open("Help_Guide_ZetaSphere_Histogram_Analyzer.pdf", "rb") as f:
                 pdf_data = f.read()
                 
             # 2. Provide a quick download button at the top
