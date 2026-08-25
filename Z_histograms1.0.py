@@ -78,15 +78,18 @@ with st.sidebar:
     
     show_grid = st.checkbox("Show Grid Lines", value=False)
     show_legend = st.checkbox("Show Legend", value=True)
-    # --- NEW: Legend Position Control ---
-    legend_position = st.selectbox(
-        "Legend Position", 
-        ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left", "upper center", "lower center"],
-        index=0
-    )
+    # --- NEW: Conditional Legend Position ---
+    if show_legend:
+        legend_position = st.selectbox(
+            "Legend Position", 
+            ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left", "upper center", "lower center"],
+            index=0
+        )
+    else:
+        # Provide a safe invisible default so Python doesn't crash looking for the variable
+        legend_position = "best"
+
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
-    
-    
 
     st.markdown("---")
     st.subheader("Advanced Data Filtering")
