@@ -397,8 +397,8 @@ else:
                     import matplotlib.cm as cm
                     try:
                         cmap = plt.get_cmap(PALETTES[palette_choice])
-                        # Force the colors to stretch from the absolute 0% mark to the 100% mark
-                        color_vals = np.linspace(0, 1, len(entities))
+                        # Sample from 10% to 95% to avoid the pitch-black and pure-white extremes
+                        color_vals = np.linspace(0.10, 0.95, len(entities))
                         hex_colors = [mcolors.to_hex(cmap(c)) for c in color_vals]
                     except:
                         # Fallback for discrete lists of colors
