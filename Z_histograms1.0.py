@@ -380,7 +380,7 @@ else:
             st.download_button(
                 label="📥 Download Help Guide (PDF)",
                 data=pdf_data,
-                file_name="ZetaSphere_Help_Guide.pdf",
+                file_name="Help_Guide_ZetaSphere_Histogram_Analyzer.pdf",
                 mime="application/pdf"
             )
             
@@ -388,7 +388,7 @@ else:
             
             # 3. Embed the PDF directly into the browser
             base64_pdf = base64.b64encode(pdf_data).decode('utf-8')
-            pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf"></iframe>'
+            pdf_display = f'<embed src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800" type="application/pdf">'
             st.markdown(pdf_display, unsafe_allow_html=True)
             
         except FileNotFoundError:
