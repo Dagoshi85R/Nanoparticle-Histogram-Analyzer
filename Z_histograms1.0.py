@@ -35,9 +35,18 @@ PALETTES = {
     "Rocket": "rocket",
     "Cubehelix": "cubehelix",
     "Tab10": "tab10",
+    "Tab20": "tab20",
     "Spectral": "Spectral",
     "Set1": "Set1",
     "Set2": "Set2",
+    "Set3": "Set3",
+    "Deep": "deep",
+    "Muted": "muted",
+    "Bright": "bright",
+    "Dark": "dark",
+    "Dark2": "Dark2",
+    "Paired": "Paired",
+    "Accent": "Accent",
     "Husl": "husl"
 }
 
@@ -1033,13 +1042,28 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # --- FIXED: Stop color repeating on discrete palettes ---
+                            # --- FIXED: Dual-Logic for Continuous vs Discrete Palettes ---
                             pops = np.sort(res['df']['Population'].unique())
                             palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                             
-                            # Ask Seaborn for the EXACT number of colors needed. No complex math!
-                            exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
-                            pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
+                            # List of standard discrete palettes that should not be stretched
+                            discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
+                            
+                            if palette_name in discrete_palettes:
+                                # Rule 1: Discrete palettes get exactly the number of colors they need
+                                exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
+                                pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
+                            else:
+                                # Rule 2: Continuous palettes get stretched (15% to 85%) using standard RGB tuples
+                                full_pal = sns.color_palette(palette_name, n_colors=256)
+                                if len(pops) == 1:
+                                    # Grab the exact middle color
+                                    pop_color_dict = {int(pop): full_pal[128] for pop in pops}
+                                else:
+                                    # Spread indices evenly between 15% (38) and 85% (217)
+                                    indices = np.linspace(38, 217, len(pops)).astype(int)
+                                    # Wrap 'pop' and 'idx' in standard int() to prevent Seaborn numeric crashes
+                                    pop_color_dict = {int(pop): full_pal[int(idx)] for pop, idx in zip(pops, indices)}
                             
                             sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, binrange=(0, gmm_x_max), kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
                             
@@ -1080,13 +1104,28 @@ else:
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
                                 
-                                # --- FIXED: Stop color repeating on discrete palettes ---
+                                # --- FIXED: Dual-Logic for Continuous vs Discrete Palettes ---
                                 pops = np.sort(res['df']['Population'].unique())
                                 palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                             
-                                # Ask Seaborn for the EXACT number of colors needed. No complex math!
-                                exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
-                                pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
+                                # List of standard discrete palettes that should not be stretched
+                                discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
+                            
+                                if palette_name in discrete_palettes:
+                                    # Rule 1: Discrete palettes get exactly the number of colors they need
+                                    exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
+                                    pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
+                                else:
+                                    # Rule 2: Continuous palettes get stretched (15% to 85%) using standard RGB tuples
+                                    full_pal = sns.color_palette(palette_name, n_colors=256)
+                                    if len(pops) == 1:
+                                        # Grab the exact middle color
+                                        pop_color_dict = {int(pop): full_pal[128] for pop in pops}
+                                    else:
+                                        # Spread indices evenly between 15% (38) and 85% (217)
+                                        indices = np.linspace(38, 217, len(pops)).astype(int)
+                                        # Wrap 'pop' and 'idx' in standard int() to prevent Seaborn numeric crashes
+                                        pop_color_dict = {int(pop): full_pal[int(idx)] for pop, idx in zip(pops, indices)}
                                 
                                 # 1. The Updated Plot Generator
                                 sns.histplot(
