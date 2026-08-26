@@ -1037,15 +1037,15 @@ else:
                             pops = np.sort(res['df']['Population'].unique())
                             palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                             
-                            # Safely generate 256 colors using Seaborn (handles all colormaps natively)
-                            full_pal = sns.color_palette(palette_name, n_colors=256)
+                            # FORCE HEX FORMAT: This absolutely prevents Seaborn from silently failing on numeric data
+                            full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                             
-                            # Map populations to indices strictly between 10% (index 25) and 95% (index 242)
                             if len(pops) == 1:
                                 pop_color_dict = {pop: full_pal[128] for pop in pops}
                             else:
                                 indices = np.linspace(25, 242, len(pops)).astype(int)
-                                pop_color_dict = {pop: full_pal[indices[idx]] for idx, pop in enumerate(pops)}
+                                # Wrap 'idx' in standard int() to prevent numpy type-mismatch bugs
+                                pop_color_dict = {pop: full_pal[int(idx)] for pop, idx in zip(pops, indices)}
                             
                             sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, binrange=(0, gmm_x_max), kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
                             
@@ -1090,15 +1090,15 @@ else:
                             pops = np.sort(res['df']['Population'].unique())
                             palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                             
-                            # Safely generate 256 colors using Seaborn (handles all colormaps natively)
-                            full_pal = sns.color_palette(palette_name, n_colors=256)
+                            # FORCE HEX FORMAT: This absolutely prevents Seaborn from silently failing on numeric data
+                            full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                             
-                            # Map populations to indices strictly between 10% (index 25) and 95% (index 242)
                             if len(pops) == 1:
                                 pop_color_dict = {pop: full_pal[128] for pop in pops}
                             else:
                                 indices = np.linspace(25, 242, len(pops)).astype(int)
-                                pop_color_dict = {pop: full_pal[indices[idx]] for idx, pop in enumerate(pops)}
+                                # Wrap 'idx' in standard int() to prevent numpy type-mismatch bugs
+                                pop_color_dict = {pop: full_pal[int(idx)] for pop, idx in zip(pops, indices)}
                                 
                                 # 1. The Updated Plot Generator
                                 sns.histplot(
