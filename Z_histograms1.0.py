@@ -1033,11 +1033,23 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # Force maximum contrast safely via Seaborn
+                            # --- FIXED: Maximum contrast safely bounded between 10% and 95% ---
                             pops = np.sort(res['df']['Population'].unique())
                             palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                            full_pal = sns.color_palette(palette_name, n_colors=256)
-                            pop_color_dict = {pop: full_pal[int(idx * 255 / max(1, len(pops) - 1))] for idx, pop in enumerate(pops)}
+                            
+                            import matplotlib.colors as mcolors
+                            import matplotlib.cm as cm
+                            try:
+                                cmap = plt.get_cmap(palette_name)
+                                # If only 1 population is found, use the exact middle color. Otherwise, spread from 10% to 95%.
+                                if len(pops) == 1:
+                                    color_vals = [0.5]
+                                else:
+                                    color_vals = np.linspace(0.10, 0.95, len(pops))
+                                pop_color_dict = {pop: mcolors.to_hex(cmap(c)) for pop, c in zip(pops, color_vals)}
+                            except:
+                                hex_colors = sns.color_palette(palette_name, len(pops)).as_hex()
+                                pop_color_dict = {pop: hex_colors[idx] for idx, pop in enumerate(pops)}
                             
                             sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, binrange=(0, gmm_x_max), kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
                             
@@ -1078,11 +1090,23 @@ else:
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
                                 
-                                # Force maximum contrast safely via Seaborn
-                                pops = np.sort(res['df']['Population'].unique())
-                                palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                                full_pal = sns.color_palette(palette_name, n_colors=256)
-                                pop_color_dict = {pop: full_pal[int(idx * 255 / max(1, len(pops) - 1))] for idx, pop in enumerate(pops)}
+                                # --- FIXED: Maximum contrast safely bounded between 10% and 95% ---
+                            pops = np.sort(res['df']['Population'].unique())
+                            palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
+                            
+                            import matplotlib.colors as mcolors
+                            import matplotlib.cm as cm
+                            try:
+                                cmap = plt.get_cmap(palette_name)
+                                # If only 1 population is found, use the exact middle color. Otherwise, spread from 10% to 95%.
+                                if len(pops) == 1:
+                                    color_vals = [0.5]
+                                else:
+                                    color_vals = np.linspace(0.10, 0.95, len(pops))
+                                pop_color_dict = {pop: mcolors.to_hex(cmap(c)) for pop, c in zip(pops, color_vals)}
+                            except:
+                                hex_colors = sns.color_palette(palette_name, len(pops)).as_hex()
+                                pop_color_dict = {pop: hex_colors[idx] for idx, pop in enumerate(pops)}
                                 
                                 # 1. The Updated Plot Generator
                                 sns.histplot(
