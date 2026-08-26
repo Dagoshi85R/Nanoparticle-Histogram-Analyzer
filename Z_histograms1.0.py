@@ -1033,19 +1033,11 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # --- FIXED: Maximum contrast safely bounded between 10% and 95% ---
+                            # Force maximum contrast safely via Seaborn
                             pops = np.sort(res['df']['Population'].unique())
                             palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                            
-                            # FORCE HEX FORMAT: This absolutely prevents Seaborn from silently failing on numeric data
-                            full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
-                            
-                            if len(pops) == 1:
-                                pop_color_dict = {pop: full_pal[128] for pop in pops}
-                            else:
-                                indices = np.linspace(25, 242, len(pops)).astype(int)
-                                # Wrap 'idx' in standard int() to prevent numpy type-mismatch bugs
-                                pop_color_dict = {pop: full_pal[int(idx)] for pop, idx in zip(pops, indices)}
+                            full_pal = sns.color_palette(palette_name, n_colors=256)
+                            pop_color_dict = {pop: full_pal[int(idx * 255 / max(1, len(pops) - 1))] for idx, pop in enumerate(pops)}
                             
                             sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, binrange=(0, gmm_x_max), kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
                             
@@ -1086,19 +1078,11 @@ else:
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
                                 
-                                # --- FIXED: Maximum contrast safely bounded between 10% and 95% ---
-                            pops = np.sort(res['df']['Population'].unique())
-                            palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                            
-                            # FORCE HEX FORMAT: This absolutely prevents Seaborn from silently failing on numeric data
-                            full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
-                            
-                            if len(pops) == 1:
-                                pop_color_dict = {pop: full_pal[128] for pop in pops}
-                            else:
-                                indices = np.linspace(25, 242, len(pops)).astype(int)
-                                # Wrap 'idx' in standard int() to prevent numpy type-mismatch bugs
-                                pop_color_dict = {pop: full_pal[int(idx)] for pop, idx in zip(pops, indices)}
+                                # Force maximum contrast safely via Seaborn
+                                pops = np.sort(res['df']['Population'].unique())
+                                palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
+                                full_pal = sns.color_palette(palette_name, n_colors=256)
+                                pop_color_dict = {pop: full_pal[int(idx * 255 / max(1, len(pops) - 1))] for idx, pop in enumerate(pops)}
                                 
                                 # 1. The Updated Plot Generator
                                 sns.histplot(
