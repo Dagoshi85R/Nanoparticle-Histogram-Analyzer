@@ -1042,35 +1042,33 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # --- FIXED: Dual-Logic for Continuous vs Discrete Palettes ---
-                            pops = np.sort(res['df']['Population'].unique())
-                            palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
+                            # --- FIXED: Stop Numeric Color Math & Restore Full Range ---
+                            # Force Population to be a String so Seaborn treats it strictly as discrete categories
+                            res['df']['Pop_Label'] = res['df']['Population'].astype(str)
+                            pops = np.sort(res['df']['Pop_Label'].unique())
                             
-                            # List of standard discrete palettes that should not be stretched
+                            palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                             discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
                             
                             if palette_name in discrete_palettes:
-                                # Rule 1: Discrete palettes get exactly the number of colors they need
                                 exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
                                 pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                             else:
-                                # Rule 2: Continuous palettes get stretched (15% to 85%) using standard RGB tuples
+                                # Restore 0 to 255 so the extreme colors survive the 20% alpha transparency!
                                 full_pal = sns.color_palette(palette_name, n_colors=256)
                                 if len(pops) == 1:
-                                    # Grab the exact middle color
-                                    pop_color_dict = {int(pop): full_pal[128] for pop in pops}
+                                    pop_color_dict = {pops[0]: full_pal[128]}
                                 else:
-                                    # Spread indices evenly between 15% (38) and 85% (217)
-                                    indices = np.linspace(38, 217, len(pops)).astype(int)
-                                    # Wrap 'pop' and 'idx' in standard int() to prevent Seaborn numeric crashes
-                                    pop_color_dict = {int(pop): full_pal[int(idx)] for pop, idx in zip(pops, indices)}
+                                    indices = np.linspace(0, 255, len(pops)).astype(int)
+                                    pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                             
-                            sns.histplot(data=res['df'], x=res['feature_col'], hue='Population', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, binrange=(0, gmm_x_max), kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
+                            # Update hue to 'Pop_Label'
+                            sns.histplot(data=res['df'], x=res['feature_col'], hue='Pop_Label', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, binrange=(0, gmm_x_max), kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
                             
                             # Add Vertical Markers to Single Channel
                             if central_marker != "None":
                                 for pop in pops:
-                                    p_data = res['df'][res['df']['Population'] == pop][res['feature_col']].dropna()
+                                    p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
                                     if len(p_data) > 1:
                                         val = None
                                         if central_marker == "Mean": val = p_data.mean()
@@ -1104,39 +1102,35 @@ else:
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
                                 
-                                # --- FIXED: Dual-Logic for Continuous vs Discrete Palettes ---
-                                pops = np.sort(res['df']['Population'].unique())
+                                # --- FIXED: Stop Numeric Color Math & Restore Full Range ---
+                                res['df']['Pop_Label'] = res['df']['Population'].astype(str)
+                                pops = np.sort(res['df']['Pop_Label'].unique())
+                                
                                 palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                            
-                                # List of standard discrete palettes that should not be stretched
                                 discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
-                            
+                                
                                 if palette_name in discrete_palettes:
-                                    # Rule 1: Discrete palettes get exactly the number of colors they need
                                     exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
                                     pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                                 else:
-                                    # Rule 2: Continuous palettes get stretched (15% to 85%) using standard RGB tuples
+                                    # Restore 0 to 255 so the extreme colors survive the 20% alpha transparency!
                                     full_pal = sns.color_palette(palette_name, n_colors=256)
                                     if len(pops) == 1:
-                                        # Grab the exact middle color
-                                        pop_color_dict = {int(pop): full_pal[128] for pop in pops}
+                                        pop_color_dict = {pops[0]: full_pal[128]}
                                     else:
-                                        # Spread indices evenly between 15% (38) and 85% (217)
-                                        indices = np.linspace(38, 217, len(pops)).astype(int)
-                                        # Wrap 'pop' and 'idx' in standard int() to prevent Seaborn numeric crashes
-                                        pop_color_dict = {int(pop): full_pal[int(idx)] for pop, idx in zip(pops, indices)}
+                                        indices = np.linspace(0, 255, len(pops)).astype(int)
+                                        pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                                 
-                                # 1. The Updated Plot Generator
+                                # 1. The Updated Plot Generator (using Pop_Label)
                                 sns.histplot(
                                     data=res['df'], 
                                     x=res['feature_col'], 
-                                    hue='Population', 
+                                    hue='Pop_Label', 
                                     palette=pop_color_dict, 
                                     element='step', 
                                     binwidth=gmm_bin_width, 
                                     binrange=(0, gmm_x_max), 
-                                    kde=(display_style != "Histogram Only"), # <-- FIXED!
+                                    kde=(display_style != "Histogram Only"), 
                                     fill=(display_style != "Smooth Curve Only"), 
                                     alpha=(0.2 if display_style != "Smooth Curve Only" else 0.0), 
                                     line_kws={'linewidth': line_width}, 
@@ -1149,24 +1143,21 @@ else:
                                     import matplotlib.lines as mlines
                                     legend = ax_sub.get_legend()
                                     if legend is not None:
-                                        # Force all dictionary keys to strings to guarantee a match
-                                        str_color_dict = {str(k).strip(): v for k, v in pop_color_dict.items()}
-
                                         handles, labels = [], []
                                         for text_obj in legend.get_texts():
                                             pop_name = text_obj.get_text().strip()
                                             labels.append(pop_name)
-                                            # Grab the correct color using the string-matched dictionary
-                                            color = str_color_dict.get(pop_name, axes_color)
+                                            # Using string keys matches perfectly now
+                                            color = pop_color_dict.get(pop_name, axes_color)
                                             handles.append(mlines.Line2D([], [], color=color, linewidth=line_width))
-                            
+                                
                                         # Overwrite the invisible legend with our new solid colored lines
                                         ax_sub.legend(handles=handles, labels=labels, title=legend.get_title().get_text())
                                 
                                 # Add Vertical Markers to Multi-Channel
                                 if central_marker != "None":
                                     for pop in pops:
-                                        p_data = res['df'][res['df']['Population'] == pop][res['feature_col']].dropna()
+                                        p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
                                         if len(p_data) > 1:
                                             val = None
                                             if central_marker == "Mean": val = p_data.mean()
