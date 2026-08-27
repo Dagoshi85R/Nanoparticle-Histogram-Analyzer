@@ -653,26 +653,21 @@ else:
                             if f_col:
                                 z_entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "df": item['df'], "color": item['color'], "style": style})
 
-                # --- FIXED: Smart Palette Dual-Logic for Zeta Samples ---
+                # --- FIXED: Restore Full Spectrum to bring back the Yellow! ---
                 if z_entities and palette_choice != "Custom (Sample Colors)":
                     palette_name = PALETTES[palette_choice]
                     discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
                     
                     if palette_name in discrete_palettes:
-                        # Grab exact, non-repeating colors for discrete palettes
+                        # Safety check for discrete palettes (exact colors)
                         hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(z_entities))).as_hex()
                     else:
-                        # Tighter bounds: 15% (38) to 80% (204) to avoid invisible yellow and pitch black
-                        full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
-                        if len(z_entities) == 1:
-                            hex_colors = [full_pal[128]]
-                        else:
-                            indices = np.linspace(38, 204, len(z_entities)).astype(int)
-                            hex_colors = [full_pal[idx] for idx in indices]
+                        # Let Seaborn automatically spread continuous palettes from 0% to 100% natively!
+                        hex_colors = sns.color_palette(palette_name, n_colors=len(z_entities)).as_hex()
                             
                     for i, ent in enumerate(z_entities): 
                         ent["color"] = hex_colors[i]
-
+                        
                 if not z_entities:
                     st.info("No active data to plot.")
                 else:
