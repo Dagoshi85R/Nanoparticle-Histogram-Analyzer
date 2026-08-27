@@ -1506,15 +1506,27 @@ else:
                     ch1_name = found[0][1] if len(found) >= 1 else "Channel 1"
                     ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
                     
+                    # --- FIXED: Mathematical Override for True Full Spectrum (Tab 6) ---
                     if use_palette_t6:
-                        custom_colors = sns.color_palette(PALETTES[palette_choice], 3).as_hex()
+                        # Fallback to viridis if they accidentally leave it on Custom Sample Colors
+                        palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
+                        discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
+                        
+                        if palette_name in discrete_palettes:
+                            custom_colors = sns.color_palette(palette_name, n_colors=3).as_hex()
+                        else:
+                            full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
+                            # We always need exactly 3 colors for colocalization morphology comparisons
+                            indices = np.linspace(0, 255, 3).astype(int)
+                            custom_colors = [full_pal[idx] for idx in indices]
+                            
                         ch1_color = custom_colors[0]
                         ch2_color = custom_colors[1]
                         coloc_color = custom_colors[2]
                     else:
                         ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
                         ch2_color = found[1][2] if len(found) >= 2 else "#228B22"
-                        coloc_color = "#FFD700" 
+                        coloc_color = "#FFD700"
                         
                     palette_colors = [ch1_color, ch2_color, coloc_color]
 
