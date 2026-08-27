@@ -653,9 +653,25 @@ else:
                             if f_col:
                                 z_entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "df": item['df'], "color": item['color'], "style": style})
 
+                # --- FIXED: Smart Palette Dual-Logic for Zeta Samples ---
                 if z_entities and palette_choice != "Custom (Sample Colors)":
-                    hex_colors = sns.color_palette(PALETTES[palette_choice], len(z_entities)).as_hex()
-                    for i, ent in enumerate(z_entities): ent["color"] = hex_colors[i]
+                    palette_name = PALETTES[palette_choice]
+                    discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
+                    
+                    if palette_name in discrete_palettes:
+                        # Grab exact, non-repeating colors for discrete palettes
+                        hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(z_entities))).as_hex()
+                    else:
+                        # Smoothly stretch continuous palettes from 10% (index 25) to 95% (index 242)
+                        full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
+                        if len(z_entities) == 1:
+                            hex_colors = [full_pal[128]]
+                        else:
+                            indices = np.linspace(25, 242, len(z_entities)).astype(int)
+                            hex_colors = [full_pal[idx] for idx in indices]
+                            
+                    for i, ent in enumerate(z_entities): 
+                        ent["color"] = hex_colors[i]
 
                 if not z_entities:
                     st.info("No active data to plot.")
