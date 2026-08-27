@@ -662,12 +662,12 @@ else:
                         # Grab exact, non-repeating colors for discrete palettes
                         hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(z_entities))).as_hex()
                     else:
-                        # Smoothly stretch continuous palettes from 10% (index 25) to 95% (index 242)
+                        # Tighter bounds: 15% (38) to 80% (204) to avoid invisible yellow and pitch black
                         full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                         if len(z_entities) == 1:
                             hex_colors = [full_pal[128]]
                         else:
-                            indices = np.linspace(25, 242, len(z_entities)).astype(int)
+                            indices = np.linspace(38, 204, len(z_entities)).astype(int)
                             hex_colors = [full_pal[idx] for idx in indices]
                             
                     for i, ent in enumerate(z_entities): 
