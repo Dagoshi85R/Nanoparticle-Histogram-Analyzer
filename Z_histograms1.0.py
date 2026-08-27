@@ -884,7 +884,28 @@ else:
                     x_col = 'Channel' if grouping == "Channel (Compare Samples)" else 'Sample Label'
                     hue_col = 'Sample Label' if grouping == "Channel (Compare Samples)" else 'Channel'
                     
-                    active_palette = palette_dict if palette_choice == "Custom (Sample Colors)" else PALETTES[palette_choice]
+                    # --- FIXED: Mathematical Override for True Full Spectrum (Tab 3) ---
+                    if palette_choice == "Custom (Sample Colors)":
+                        active_palette = palette_dict
+                    else:
+                        unique_hues = df_conc[hue_col].unique()
+                        palette_name = PALETTES[palette_choice]
+                        discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
+                        
+                        if palette_name in discrete_palettes:
+                            hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(unique_hues))).as_hex()
+                        else:
+                            # Pull the entire 256-color gradient
+                            full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
+                            if len(unique_hues) == 1:
+                                hex_colors = [full_pal[128]]
+                            else:
+                                # Force the math to stretch from exactly 0 to exactly 255
+                                indices = np.linspace(0, 255, len(unique_hues)).astype(int)
+                                hex_colors = [full_pal[idx] for idx in indices]
+                                
+                        # Build a strict dictionary locking the exact colors to the specific categories
+                        active_palette = {hue: hex_colors[i] for i, hue in enumerate(unique_hues)}
                     
                     if graph_type == "Bar Chart": sns.barplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, errorbar='sd', capsize=0.1, ax=ax_conc, edgecolor=axes_color, linewidth=line_width, width=bar_width)
                     elif graph_type == "Dot Plot (Strip)": sns.stripplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, dodge=True, size=8, ax=ax_conc, edgecolor=axes_color, linewidth=line_width/2)
