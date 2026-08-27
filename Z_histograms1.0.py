@@ -421,19 +421,23 @@ else:
                             if f_col:
                                 entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "color": item['color'], "style": style})
 
-                # --- FIXED: Maximize color contrast for continuous palettes ---
+                # --- FIXED: Mathematical Override for True Full Spectrum (Tab 1) ---
                 if entities and palette_choice != "Custom (Sample Colors)":
-                    import matplotlib.colors as mcolors
-                    import matplotlib.cm as cm
-                    try:
-                        cmap = plt.get_cmap(PALETTES[palette_choice])
-                        # Sample from 10% to 95% to avoid the pitch-black and pure-white extremes
-                        color_vals = np.linspace(0.10, 0.95, len(entities))
-                        hex_colors = [mcolors.to_hex(cmap(c)) for c in color_vals]
-                    except:
-                        # Fallback for discrete lists of colors
-                        hex_colors = sns.color_palette(PALETTES[palette_choice], len(entities)).as_hex()
+                    palette_name = PALETTES[palette_choice]
+                    discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
                     
+                    if palette_name in discrete_palettes:
+                        hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(entities))).as_hex()
+                    else:
+                        # Pull the entire 256-color gradient
+                        full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
+                        if len(entities) == 1:
+                            hex_colors = [full_pal[128]] # Center color
+                        else:
+                            # Force the math to stretch from exactly 0 to exactly 255
+                            indices = np.linspace(0, 255, len(entities)).astype(int)
+                            hex_colors = [full_pal[idx] for idx in indices]
+                            
                     for i, ent in enumerate(entities): 
                         ent["color"] = hex_colors[i]
 
