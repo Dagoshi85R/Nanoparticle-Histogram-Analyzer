@@ -121,6 +121,15 @@ with st.sidebar:
         min_trace_length = 1
         link_radius = 10.0
 
+    # --- NEW: Help Guide Link Button ---
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("📖 Documentation")
+        st.sidebar.link_button(
+            label="View Help Guide (PDF)", 
+            url="https://github.com/Dagoshi85R/Zetasphere-Histogram-analysis/blob/main/Histogram_Analyzer_1.514.pdf",
+            use_container_width=True
+        )
+
 # --- Helper Functions ---
 def parse_file_info(uploaded_file):
     filename = uploaded_file.name
