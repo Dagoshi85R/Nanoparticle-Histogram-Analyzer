@@ -653,21 +653,26 @@ else:
                             if f_col:
                                 z_entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "df": item['df'], "color": item['color'], "style": style})
 
-                # --- FIXED: Restore Full Spectrum to bring back the Yellow! ---
+                # --- FIXED: Mathematical Override for True Full Spectrum ---
                 if z_entities and palette_choice != "Custom (Sample Colors)":
                     palette_name = PALETTES[palette_choice]
                     discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
                     
                     if palette_name in discrete_palettes:
-                        # Safety check for discrete palettes (exact colors)
                         hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(z_entities))).as_hex()
                     else:
-                        # Let Seaborn automatically spread continuous palettes from 0% to 100% natively!
-                        hex_colors = sns.color_palette(palette_name, n_colors=len(z_entities)).as_hex()
+                        # Pull the entire 256-color gradient
+                        full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
+                        if len(z_entities) == 1:
+                            hex_colors = [full_pal[128]] # Center color
+                        else:
+                            # Force the math to stretch from exactly 0 to exactly 255
+                            indices = np.linspace(0, 255, len(z_entities)).astype(int)
+                            hex_colors = [full_pal[idx] for idx in indices]
                             
                     for i, ent in enumerate(z_entities): 
                         ent["color"] = hex_colors[i]
-                        
+
                 if not z_entities:
                     st.info("No active data to plot.")
                 else:
