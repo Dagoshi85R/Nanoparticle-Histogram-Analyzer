@@ -1329,9 +1329,12 @@ else:
                         wedges, texts, autotexts = ax.pie(
                             plot_sizes, labels=pie_labels, autopct='%1.1f%%', colors=plot_colors, 
                             startangle=140, textprops={'color': axes_color, 'fontsize': label_size}, 
-                            # --- FIXED: Use line_width instead of axes_width for pie slices ---
-                            wedgeprops={'edgecolor': axes_color, 'linewidth': line_width}
+                            wedgeprops={'edgecolor': axes_color, 'linewidth': line_width},
+                            radius=1.0 # Force absolute radius
                         )
+                        
+                        # --- FIXED: Lock axes limits so text doesn't auto-shrink the pie ---
+                        ax.set(xlim=(-1.5, 1.5), ylim=(-1.5, 1.5))
                         
                         if show_legend:
                             # --- FIXED: Inject leg_size into the legend and axes_width to its frame ---
@@ -1384,9 +1387,13 @@ else:
                             p_data['sizes'], labels=pie_labels_m, autopct='%1.1f%%', 
                             colors=p_data['colors'], startangle=140, 
                             textprops={'color': axes_color, 'fontsize': label_size},
-                            # --- FIXED: Use line_width here too ---
-                            wedgeprops={'edgecolor': axes_color, 'linewidth': line_width}
+                            wedgeprops={'edgecolor': axes_color, 'linewidth': line_width},
+                            radius=1.0 # Force absolute radius
                         )
+                        
+                        # --- FIXED: Lock axes limits for the Master Grid too ---
+                        ax_m.set(xlim=(-1.5, 1.5), ylim=(-1.5, 1.5))
+                        
                         ax_m.set_title(p_data['title'], color=axes_color, fontweight='bold', fontsize=title_size)
                         
                         if show_legend:
