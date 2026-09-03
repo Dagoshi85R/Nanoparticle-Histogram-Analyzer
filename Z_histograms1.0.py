@@ -1242,7 +1242,7 @@ else:
             st.warning("No 'Colocalization' measurement files detected.")
         else:
             st.info("""💡 **Note:** Pie charts display the percentage of unique particles colocalized versus particles detected strictly in a single channel.
-            Your percentages may differ slightly from ZetaSphere's pdf report. This is expected! This app process displays the percentages of all your raw data, while ZetaSphere applies a diffussion correction miltiplier to compensate for small particles drifting out of the camera's field of view. This app prioritizes 100% mathematical transparency by plotting exactly what is in your data file.""")
+            Your percentages may differ slightly from ZetaSphere's pdf report. This is expected! This app process displays the percentages of all your raw data, while ZetaSphere applies a diffussion correction multiplier to compensate for small particles drifting out of the camera's field of view. This app prioritizes 100% mathematical transparency by plotting exactly what is in your data file.""")
             
             active_coloc_items = []
             for ch, items in processed_data['Colocalization'].items():
