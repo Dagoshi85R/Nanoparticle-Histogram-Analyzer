@@ -1553,16 +1553,15 @@ else:
                         'Size': pd.concat([single_c1[size_col], single_c2[size_col], matched_df['Colocalized_Size']], ignore_index=True)
                     })
                     
-                    # Plot 2: Hydrodynamic Size Shift (KDE)
-                    # bw_adjust=0.5 tightens the mathematical smoothing to stop it from bleeding into negatives
-                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax2, fill=True, palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend, bw_adjust=0.5)
-                    ax2.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
-                    ax2.set_xlabel("Particle Size (nm)", color=axes_color, fontsize=label_size)
-                    ax2.set_ylabel("Density", color=axes_color, fontsize=label_size)
-                    
-                    # Force the x-axis to start exactly at 0
-                    ax2.set_xlim(left=0)
-                    
+                    # Plot 2: Hydrodynamic Size Shift (Polygon Histogram)
+                    # Bins the exact data and connects them, eliminating impossible Gaussian tails
+                    sns.histplot(
+                        data=morph_df, x='Size', hue='Group', ax=ax2, 
+                        element="poly", fill=True, stat="density", 
+                        palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend,
+                        binwidth=10  # <--- Forces the curve to lock exactly to your 10nm bins
+                    )
+                                        
                     # Polish axes and typography
                     for ax in [ax1, ax2]:
                         ax.tick_params(colors=axes_color, labelsize=label_size, width=axes_width)
