@@ -1553,11 +1553,15 @@ else:
                         'Size': pd.concat([single_c1[size_col], single_c2[size_col], matched_df['Colocalized_Size']], ignore_index=True)
                     })
                     
-                    # Plot 2: Hydrodynamic Size Shift (KDE) - Now strictly clipped at 0
-                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax2, fill=True, palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend, clip=(0, None))
+                    # Plot 2: Hydrodynamic Size Shift (KDE)
+                    # bw_adjust=0.5 tightens the mathematical smoothing to stop it from bleeding into negatives
+                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax2, fill=True, palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend, bw_adjust=0.5)
                     ax2.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
                     ax2.set_xlabel("Particle Size (nm)", color=axes_color, fontsize=label_size)
                     ax2.set_ylabel("Density", color=axes_color, fontsize=label_size)
+                    
+                    # Force the x-axis to start exactly at 0
+                    ax2.set_xlim(left=0)
                     
                     # Polish axes and typography
                     for ax in [ax1, ax2]:
