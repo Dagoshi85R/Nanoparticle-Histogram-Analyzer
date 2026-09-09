@@ -12,7 +12,7 @@ from sklearn.mixture import GaussianMixture
 from scipy.stats import gaussian_kde, mannwhitneyu, wasserstein_distance, anderson_ksamp
 
 # --- Configuration & Styling ---
-st.set_page_config(page_title="ZetaSphere Multi-Sample Web Analyzer", layout="wide")
+st.set_page_config(page_title="Nanoparticle Multi-Sample Web Analyzer", layout="wide")
 
 DEFAULT_CHANNELS = {
     '488s': ('Scatter', '#808080'),
@@ -53,7 +53,7 @@ PALETTES = {
 # --- Sidebar: Upload & Settings ---
 with st.sidebar:
     st.image("logo.png", use_container_width=True)
-    st.title("ZetaSphere Histogram Analyzer")
+    st.title("Nanoparticle Histogram Analyzer")
     st.caption("Created by Daniel Gonzalez Silvera. \nImaging Facility, IRR, The University of Edinburgh.\n2026")
     
     st.header("1. Upload Data")
@@ -126,7 +126,7 @@ with st.sidebar:
         st.sidebar.subheader("📖 Documentation")
         st.sidebar.link_button(
             label="View Help Guide (PDF)", 
-            url="https://github.com/Dagoshi85R/Zetasphere-Histogram-analysis/blob/main/Histogram_Analyzer_1.514.pdf",
+            url="https://github.com/Dagoshi85R/Nanoparticle-Histogram-Analyzer/blob/main/Histogram_Analyzer_1.514.pdf",
             use_container_width=True
         )
 
