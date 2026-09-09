@@ -1439,18 +1439,17 @@ else:
                 for idx, item in enumerate(active_coloc_items):
                     df = item['df'].copy()
                     
-                    # Find our necessary columns
+                    # Find our necessary columns (Removed area_col requirement)
                     ch_col = find_data_column(df, ['channel'])
                     coloc_col = find_data_column(df, ['colocalised', 'colocalized'])
                     pos_col = find_data_column(df, ['position'])
                     x_col = find_data_column(df, ['xc'])
                     y_col = find_data_column(df, ['yc'])
                     int_col = find_data_column(df, ['mean intensity'])
-                    area_col = find_data_column(df, ['mean area'])
                     ar_col = find_data_column(df, ['aspect ratio'])
                     size_col = find_data_column(df, ['particle size'])
                     
-                    if not all([ch_col, coloc_col, pos_col, x_col, y_col, int_col, area_col, ar_col, size_col]):
+                    if not all([ch_col, coloc_col, pos_col, x_col, y_col, int_col, ar_col, size_col]):
                         st.warning(f"File {item['filename']} is missing required morphology/coordinate columns.")
                         continue
                         
@@ -1486,7 +1485,6 @@ else:
                                 matched_pairs.append({
                                     'C1_Intensity': c1_data.iloc[i][int_col],
                                     'C2_Intensity': c2_data.iloc[min_idx][int_col],
-                                    'Colocalized_Area': (c1_data.iloc[i][area_col] + c2_data.iloc[min_idx][area_col]) / 2,
                                     'Colocalized_AR': (c1_data.iloc[i][ar_col] + c2_data.iloc[min_idx][ar_col]) / 2,
                                     'Colocalized_Size': (c1_data.iloc[i][size_col] + c2_data.iloc[min_idx][size_col]) / 2
                                 })
@@ -1497,10 +1495,10 @@ else:
                         st.warning("No colocalized pairs could be matched within the given Link Radius.")
                         continue
                         
-                    # Create the 3-panel plotting grid
-                    w = (fig_width * 3) if 'fig_width' in locals() else 18
+                    # Create the 2-panel plotting grid
+                    w = (fig_width * 2) if 'fig_width' in locals() else 12
                     h = fig_height if 'fig_height' in locals() else 5
-                    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(w, h))
+                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(w, h))
                     fig.patch.set_facecolor(bg_color)
                     
                     # Safely handle legend size if it exists in your sidebar
@@ -1512,7 +1510,7 @@ else:
                     ax1.set_xlabel("Channel 1 Mean Intensity", color=axes_color, fontsize=label_size)
                     ax1.set_ylabel("Channel 2 Mean Intensity", color=axes_color, fontsize=label_size)
                     
-                    # --- NEW: DYNAMIC CHANNEL NAMES & COLORS ---
+                    # --- DYNAMIC CHANNEL NAMES & COLORS ---
                     name_lower = item['filename'].lower()
                     found = []
                     for code, (c_name, color) in DEFAULT_CHANNELS.items():
@@ -1533,7 +1531,6 @@ else:
                             custom_colors = sns.color_palette(palette_name, n_colors=3).as_hex()
                         else:
                             full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
-                            # We always need exactly 3 colors for colocalization morphology comparisons
                             indices = np.linspace(0, 255, 3).astype(int)
                             custom_colors = [full_pal[idx] for idx in indices]
                             
@@ -1543,34 +1540,27 @@ else:
                     else:
                         ch1_color = found[0][2] if len(found) >= 1 else "#4169E1"
                         ch2_color = found[1][2] if len(found) >= 2 else "#228B22"
-                        coloc_color = "#FFD700"
+                        coloc_color = "#FFD700" 
                         
                     palette_colors = [ch1_color, ch2_color, coloc_color]
 
-                    # Data Prep for Morphology & Size
+                    # Data Prep for Size
                     single_c1 = df[(df[ch_col] == ch1_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
                     single_c2 = df[(df[ch_col] == ch2_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
                     
                     morph_df = pd.DataFrame({
                         'Group': [f'Only {ch1_name}']*len(single_c1) + [f'Only {ch2_name}']*len(single_c2) + ['Colocalized']*len(matched_df),
-                        'Area': pd.concat([single_c1[area_col], single_c2[area_col], matched_df['Colocalized_Area']], ignore_index=True),
                         'Size': pd.concat([single_c1[size_col], single_c2[size_col], matched_df['Colocalized_Size']], ignore_index=True)
                     })
                     
-                    # Plot 2: Aggregation Check (Boxplot for Area)
-                    sns.boxplot(data=morph_df, x='Group', y='Area', ax=ax2, palette=palette_colors, linewidth=line_width)
-                    ax2.set_title("Aggregation Check (Area)", color=axes_color, fontweight='bold', fontsize=title_size)
-                    ax2.set_ylabel("Mean Area", color=axes_color, fontsize=label_size)
-                    ax2.set_xlabel("", fontsize=label_size)
-                    
-                    # Plot 3: Hydrodynamic Size Shift (KDE)
-                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax3, fill=True, palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend)
-                    ax3.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
-                    ax3.set_xlabel("Particle Size (nm)", color=axes_color, fontsize=label_size)
-                    ax3.set_ylabel("Density", color=axes_color, fontsize=label_size)
+                    # Plot 2: Hydrodynamic Size Shift (KDE) - Now strictly clipped at 0
+                    sns.kdeplot(data=morph_df, x='Size', hue='Group', ax=ax2, fill=True, palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend, clip=(0, None))
+                    ax2.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
+                    ax2.set_xlabel("Particle Size (nm)", color=axes_color, fontsize=label_size)
+                    ax2.set_ylabel("Density", color=axes_color, fontsize=label_size)
                     
                     # Polish axes and typography
-                    for ax in [ax1, ax2, ax3]:
+                    for ax in [ax1, ax2]:
                         ax.tick_params(colors=axes_color, labelsize=label_size, width=axes_width)
                         for spine in ax.spines.values(): 
                             spine.set_color(axes_color)
@@ -1579,7 +1569,7 @@ else:
                         
                     # Style the legend for the KDE plot (tied to the sidebar toggle)
                     if show_legend:
-                        legend = ax3.get_legend()
+                        legend = ax2.get_legend()
                         if legend is not None:
                             plt.setp(legend.get_texts(), color=axes_color, fontsize=leg_size)
                             plt.setp(legend.get_title(), color=axes_color, fontsize=leg_size, fontweight='bold')
@@ -1590,7 +1580,7 @@ else:
                     plt.tight_layout()
                     st.pyplot(fig)
                     
-                    # --- NEW: Image Download Buttons ---
+                    # Image Download Buttons
                     safe_filename = f"Coloc_Quality_{item['label'].replace(' ', '_')}"
                     create_download_buttons(fig, safe_filename)
                     plt.close(fig)
@@ -1613,33 +1603,8 @@ else:
                     stat_cols[2].metric("Correlation Quality", score)
                     st.info(f"**Interpretation:** {exp}")
 
-                    # --- Morphology & Size Statistics ---
-                    st.markdown("### 🔬 Aggregation & Size Summary")
-                    
-                    med_area_c1 = morph_df[morph_df['Group'] == f'Only {ch1_name}']['Area'].median()
-                    med_area_c2 = morph_df[morph_df['Group'] == f'Only {ch2_name}']['Area'].median()
-                    med_area_coloc = morph_df[morph_df['Group'] == 'Colocalized']['Area'].median()
-                    
-                    med_area_c1 = med_area_c1 if pd.notna(med_area_c1) else 0
-                    med_area_c2 = med_area_c2 if pd.notna(med_area_c2) else 0
-                    
-                    avg_single_area = (med_area_c1 + med_area_c2) / 2
-                    area_ratio = med_area_coloc / avg_single_area if avg_single_area > 0 else 1
-                    
-                    if area_ratio >= 1.5:
-                        area_score, area_exp = "🔴 High Risk", "Colocalized particles have a significantly larger cross-sectional area (≥50% bigger) than single-positive particles. This strongly suggests physical clumping (doublets/aggregates) rather than true single-particle colocalization."
-                    elif area_ratio >= 1.2:
-                        area_score, area_exp = "🟡 Moderate Risk", "Colocalized particles are slightly larger on average, indicating a possible mix of true colocalized events and some small aggregates."
-                    else:
-                        area_score, area_exp = "🟢 Low Risk", "The optical areas are highly comparable. Colocalized particles maintain a single-particle optical profile, confirming high-quality colocalization without clumping."
-
-                    st.markdown("**1. Aggregation Check (Area)**")
-                    area_cols = st.columns(4)
-                    area_cols[0].metric(f"{ch1_name} Median Area", round(med_area_c1, 1))
-                    area_cols[1].metric(f"{ch2_name} Median Area", round(med_area_c2, 1))
-                    area_cols[2].metric("Colocalized Area", round(med_area_coloc, 1))
-                    area_cols[3].metric("Aggregation Status", area_score)
-                    st.info(f"**Interpretation:** {area_exp}")
+                    # --- Size Statistics ---
+                    st.markdown("### 🔬 Hydrodynamic Size Summary")
 
                     med_size_c1 = morph_df[morph_df['Group'] == f'Only {ch1_name}']['Size'].median()
                     med_size_c2 = morph_df[morph_df['Group'] == f'Only {ch2_name}']['Size'].median()
@@ -1656,7 +1621,6 @@ else:
                     else:
                         size_score, size_exp = "🟢 Consistent Size", "Dual-labeled particles share a nearly identical hydrodynamic size with single-labeled particles, confirming that dual-labeling does not severely alter their physical profile."
 
-                    st.markdown("**2. Hydrodynamic Size Shift**")
                     size_cols = st.columns(4)
                     size_cols[0].metric(f"{ch1_name} Median Size", f"{round(med_size_c1, 1)} nm")
                     size_cols[1].metric(f"{ch2_name} Median Size", f"{round(med_size_c2, 1)} nm")
@@ -1664,16 +1628,14 @@ else:
                     size_cols[3].metric("Size Status", size_score)
                     st.info(f"**Interpretation:** {size_exp}")
                     
-                    # --- NEW: QC Data Export ---
+                    # QC Data Export
                     qc_data = {
                         "Metric": [
                             "Pearson Correlation (r)", "R-squared (R²)", "Correlation Quality", "Correlation Interpretation",
-                            f"{ch1_name} Median Area", f"{ch2_name} Median Area", "Colocalized Area", "Aggregation Status", "Aggregation Interpretation",
                             f"{ch1_name} Median Size (nm)", f"{ch2_name} Median Size (nm)", "Colocalized Median Size (nm)", "Size Status", "Size Interpretation"
                         ],
                         "Value": [
                             round(r_val, 3), round(r_sq, 3), score, exp,
-                            round(med_area_c1, 1), round(med_area_c2, 1), round(med_area_coloc, 1), area_score, area_exp,
                             round(med_size_c1, 1), round(med_size_c2, 1), round(med_size_coloc, 1), size_score, size_exp
                         ]
                     }
