@@ -1479,17 +1479,18 @@ else:
                         
                         dist_matrix = np.sqrt((x1[:, np.newaxis] - x2)**2 + (y1[:, np.newaxis] - y2)**2)
                         
-                        # 4. Find pairs within the link radius
+                        # 4. Reconstruct Pairs (Trusting the machine's 'True' flag)
+                        # We find the closest pair, but we REMOVE the strict link_radius cutoff 
+                        # because ZetaSphere already verified these are colocalized.
                         for i in range(dist_matrix.shape[0]):
                             min_idx = np.argmin(dist_matrix[i])
-                            if dist_matrix[i, min_idx] <= link_radius:
-                                matched_pairs.append({
-                                    'C1_Intensity': c1_data.iloc[i][int_col],
-                                    'C2_Intensity': c2_data.iloc[min_idx][int_col],
-                                    'Colocalized_Area': (c1_data.iloc[i][area_col] + c2_data.iloc[min_idx][area_col]) / 2,
-                                    'Colocalized_AR': (c1_data.iloc[i][ar_col] + c2_data.iloc[min_idx][ar_col]) / 2,
-                                    'Colocalized_Size': (c1_data.iloc[i][size_col] + c2_data.iloc[min_idx][size_col]) / 2
-                                })
+                            
+                            matched_pairs.append({
+                                'C1_Intensity': c1_data.iloc[i][int_col],
+                                'C2_Intensity': c2_data.iloc[min_idx][int_col],
+                                'Colocalized_AR': (c1_data.iloc[i][ar_col] + c2_data.iloc[min_idx][ar_col]) / 2,
+                                'Colocalized_Size': (c1_data.iloc[i][size_col] + c2_data.iloc[min_idx][size_col]) / 2
+                            })
                                 
                     matched_df = pd.DataFrame(matched_pairs)
                     
