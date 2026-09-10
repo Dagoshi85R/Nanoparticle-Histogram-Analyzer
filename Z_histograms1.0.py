@@ -320,23 +320,34 @@ def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, col
     x_data = data[feature_col].dropna()
     if len(x_data) == 0: return
     
+    # 1. Mathematically bin the data exactly like ZetaSphere
+    counts, edges = np.histogram(x_data, bins=bins)
+    
+    # 2. Calculate the exact center of each bin for the line points
+    centers = edges[:-1] + (bin_width / 2)
+    
+    # 3. Anchor the line to 0 on the X-axis by prepending 0 to the math
+    centers_line = np.concatenate(([0], centers, [edges[-1] + (bin_width / 2)]))
+    counts_line = np.concatenate(([0], counts, [0]))
+    
     hist_lbl = label if display_style == "Histogram Only" else None
     curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
+    # Draw Bars
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-        ax.hist(x_data, bins=bins, histtype='step', color=color, linestyle=style, linewidth=line_width, label=hist_lbl)
-        if display_style == "Both (Bar + Curve)":
-            ax.hist(x_data, bins=bins, histtype='stepfilled', color=color, alpha=0.1)
-            
+        ax.hist(x_data, bins=bins, color=color, alpha=0.3, edgecolor=color, label=hist_lbl)
+        
+    # Draw Anchored Polygon Line
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-        if len(x_data) > 1:
-            y_counts = gaussian_kde(x_data)(x_vals) * len(x_data) * bin_width
-            ax.plot(x_vals, y_counts, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+        ax.plot(centers_line, counts_line, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+        # Optional: Adds a very faint fill under the curve for better visibility
+        if display_style == "Smooth Curve Only":
+            ax.fill_between(centers_line, 0, counts_line, color=color, alpha=0.1)
 
 def plot_central_marker(ax, data, color, marker_type):
     val = np.nan
     if marker_type == "Median": val = data.median()
-    elif marker_type == "Mode": val = get_mode_from_kde(data)
+    elif marker_type == "Mode": val = calculate_stable_mode(data) # <-- Now uses the stable ZetaSphere math!
     elif marker_type == "Mean": val = data.mean()
     
     if pd.notna(val):
@@ -451,7 +462,6 @@ else:
                             if f_col:
                                 entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "color": item['color'], "style": style})
 
-                # --- FIXED: Mathematical Override for True Full Spectrum (Tab 1) ---
                 if entities and palette_choice != "Custom (Sample Colors)":
                     palette_name = PALETTES[palette_choice]
                     discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
@@ -477,19 +487,11 @@ else:
                         fig.patch.set_facecolor(bg_color)
                         for ent in entities:
                             tmp_df = pd.DataFrame({'val': ent['data']})
-                            
-                            # --- FIXED: Polygon Histogram tied perfectly to the bin slider ---
-                            sns.histplot(
-                                data=tmp_df, x='val', 
-                                element="poly", fill=True, stat="count", 
-                                binwidth=size_bin_width, color=ent['color'], 
-                                alpha=0.3, linewidth=line_width, label=ent['label'], ax=ax
-                            )
-                            
+                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                         
                         apply_custom_style(ax, "Size Distribution", "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=show_legend)
-                        ax.set_xlim(left=0) # Lock cleanly to zero!
+                        ax.set_xlim(left=0)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
 
@@ -503,18 +505,10 @@ else:
                         for i, ent in enumerate(entities):
                             ax = axes[i // cols, i % cols]
                             tmp_df = pd.DataFrame({'val': ent['data']})
-                            
-                            # --- FIXED: Polygon Histogram tied perfectly to the bin slider ---
-                            sns.histplot(
-                                data=tmp_df, x='val', 
-                                element="poly", fill=True, stat="count", 
-                                binwidth=size_bin_width, color=ent['color'], 
-                                alpha=0.3, linewidth=line_width, label=ent['label'], ax=ax
-                            )
-                            
+                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
-                            ax.set_xlim(left=0) # Lock cleanly to zero!
+                            ax.set_xlim(left=0)
                             
                         for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
@@ -527,30 +521,31 @@ else:
                         ax.set_facecolor(bg_color)
                         
                         max_h = 0
-                        kdes = []
+                        poly_data = []
                         for ent in entities:
-                            if len(ent['data']) > 1:
-                                y_c = gaussian_kde(ent['data'])(x_vals) * len(ent['data']) * size_bin_width
-                                max_h = max(max_h, max(y_c))
-                                kdes.append((y_c, ent))
+                            clean_data = ent['data'].dropna()
+                            if len(clean_data) > 1:
+                                # Mathematically anchor the joyplot ridges to 0 as well
+                                counts, edges = np.histogram(clean_data, bins=bins)
+                                centers = edges[:-1] + (size_bin_width / 2)
+                                x_line = np.concatenate(([0], centers, [edges[-1] + (size_bin_width / 2)]))
+                                y_line = np.concatenate(([0], counts, [0]))
+                                
+                                max_h = max(max_h, max(y_line))
+                                poly_data.append((x_line, y_line, ent))
                             else:
-                                kdes.append((None, ent))
+                                poly_data.append((None, None, ent))
                                 
                         offset_step = max_h * 0.4 if max_h > 0 else 1 
                         y_ticks, y_labels = [], []
                         
-                        for i, (y_c, ent) in enumerate(reversed(kdes)):
+                        for i, (x_line, y_line, ent) in enumerate(reversed(poly_data)):
                             current_offset = i * offset_step
-                            if y_c is not None:
-                                ax.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
-                                ax.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
+                            if y_line is not None:
+                                ax.fill_between(x_line, current_offset, y_line + current_offset, color=ent['color'], alpha=0.6)
+                                ax.plot(x_line, y_line + current_offset, color=ent['color'], lw=line_width)
                                 if central_marker != "None":
-                                    val = np.nan
-                                    if central_marker == "Median": val = ent['data'].median()
-                                    elif central_marker == "Mode": val = calculate_stable_mode(ent['data']) # FIXED MODE HERE
-                                    elif central_marker == "Mean": val = ent['data'].mean()
-                                    if pd.notna(val):
-                                        ax.vlines(val, current_offset, current_offset + max(y_c), color=ent['color'], linestyle=':', lw=1.5, alpha=0.8)
+                                    plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                                         
                             ax.axhline(current_offset, color=axes_color, lw=0.5, alpha=0.4)
                             y_ticks.append(current_offset)
@@ -559,6 +554,7 @@ else:
                         ax.set_yticks(y_ticks)
                         ax.set_yticklabels(y_labels, color=axes_color)
                         apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
+                        ax.set_xlim(left=0)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
 
@@ -574,21 +570,11 @@ else:
                         fig, ax = plt.subplots(figsize=(10, 6))
                         fig.patch.set_facecolor(bg_color)
                         
-                        if central_marker in ["Median", "Mean", "Mode"]: 
-                            inner_style = "quart" 
-                        else: 
-                            inner_style = None
+                        inner_style = "quart" if central_marker in ["Median", "Mean", "Mode"] else None
                         
-                        import seaborn as sns
                         sns.violinplot(
-                            data=df_violin, 
-                            x='Sample', 
-                            y='Size',
-                            hue='Sample',
-                            palette=palette_dict, 
-                            inner=inner_style,
-                            linewidth=line_width,
-                            ax=ax
+                            data=df_violin, x='Sample', y='Size', hue='Sample',
+                            palette=palette_dict, inner=inner_style, linewidth=line_width, ax=ax
                         )
                         
                         ax.set_xlabel("")
@@ -615,13 +601,12 @@ else:
                 summary_list = []
                 for ent in entities:
                     d = ent["data"]
-                    # --- FIXED: The Mode uses the new stable math ---
                     summary_list.append({
                         "Sample": ent["label"], 
                         "Count": len(d), 
                         "Mean (nm)": round(d.mean(), 1), 
                         "Median (nm)": round(d.median(), 1), 
-                        "Mode (nm)": calculate_stable_mode(d), 
+                        "Mode (nm)": calculate_stable_mode(d), # Guaranteed stable mode!
                         "SD (nm)": round(d.std(), 1), 
                         "MAD (nm)": round(get_mad(d), 1), 
                         "Span": round(get_span(d), 3), 
