@@ -11,6 +11,27 @@ import math
 from sklearn.mixture import GaussianMixture
 from scipy.stats import gaussian_kde, mannwhitneyu, wasserstein_distance, anderson_ksamp
 
+
+def calculate_stable_mode(size_array):
+    """Calculates a high-resolution, mathematically stable peak (mode) independent of visual bin size."""
+    clean_data = size_array.dropna()
+    if len(clean_data) == 0:
+        return 0
+        
+    # Create a mathematical density curve of the raw data
+    kde = gaussian_kde(clean_data)
+    
+    # Create a fine, 1-nm resolution grid covering the data's range
+    x_grid = np.linspace(clean_data.min(), clean_data.max(), 1000)
+    
+    # Evaluate the curve and find the exact peak
+    kde_values = kde.evaluate(x_grid)
+    peak_index = np.argmax(kde_values)
+    
+    # Return the exact x-value of that peak with 1 decimal place
+    return round(x_grid[peak_index], 1)
+
+
 # --- Configuration & Styling ---
 st.set_page_config(page_title="Nanoparticle Multi-Sample Web Analyzer", layout="wide")
 
@@ -438,12 +459,10 @@ else:
                     if palette_name in discrete_palettes:
                         hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(entities))).as_hex()
                     else:
-                        # Pull the entire 256-color gradient
                         full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                         if len(entities) == 1:
-                            hex_colors = [full_pal[128]] # Center color
+                            hex_colors = [full_pal[128]] 
                         else:
-                            # Force the math to stretch from exactly 0 to exactly 255
                             indices = np.linspace(0, 255, len(entities)).astype(int)
                             hex_colors = [full_pal[idx] for idx in indices]
                             
@@ -458,9 +477,19 @@ else:
                         fig.patch.set_facecolor(bg_color)
                         for ent in entities:
                             tmp_df = pd.DataFrame({'val': ent['data']})
-                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            
+                            # --- FIXED: Polygon Histogram tied perfectly to the bin slider ---
+                            sns.histplot(
+                                data=tmp_df, x='val', 
+                                element="poly", fill=True, stat="count", 
+                                binwidth=size_bin_width, color=ent['color'], 
+                                alpha=0.3, linewidth=line_width, label=ent['label'], ax=ax
+                            )
+                            
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
+                        
                         apply_custom_style(ax, "Size Distribution", "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=show_legend)
+                        ax.set_xlim(left=0) # Lock cleanly to zero!
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
 
@@ -474,9 +503,18 @@ else:
                         for i, ent in enumerate(entities):
                             ax = axes[i // cols, i % cols]
                             tmp_df = pd.DataFrame({'val': ent['data']})
-                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            
+                            # --- FIXED: Polygon Histogram tied perfectly to the bin slider ---
+                            sns.histplot(
+                                data=tmp_df, x='val', 
+                                element="poly", fill=True, stat="count", 
+                                binwidth=size_bin_width, color=ent['color'], 
+                                alpha=0.3, linewidth=line_width, label=ent['label'], ax=ax
+                            )
+                            
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
+                            ax.set_xlim(left=0) # Lock cleanly to zero!
                             
                         for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
@@ -509,7 +547,7 @@ else:
                                 if central_marker != "None":
                                     val = np.nan
                                     if central_marker == "Median": val = ent['data'].median()
-                                    elif central_marker == "Mode": val = get_mode_from_kde(ent['data'])
+                                    elif central_marker == "Mode": val = calculate_stable_mode(ent['data']) # FIXED MODE HERE
                                     elif central_marker == "Mean": val = ent['data'].mean()
                                     if pd.notna(val):
                                         ax.vlines(val, current_offset, current_offset + max(y_c), color=ent['color'], linestyle=':', lw=1.5, alpha=0.8)
@@ -525,7 +563,6 @@ else:
                         create_download_buttons(fig, "Size_Distribution")
 
                     elif multi_layout == "Violin Plot":
-                        # Prepare data into a single DataFrame for Seaborn
                         violin_data = []
                         palette_dict = {}
                         for ent in entities:
@@ -534,12 +571,9 @@ else:
                             palette_dict[ent['label']] = ent['color']
                             
                         df_violin = pd.concat(violin_data, ignore_index=True)
-                        
-                        # FIXED: Use a standard landscape width (10) so Streamlit doesn't stretch the height!
                         fig, ax = plt.subplots(figsize=(10, 6))
                         fig.patch.set_facecolor(bg_color)
                         
-                        # Use quartiles for a clean, transparent inner look
                         if central_marker in ["Median", "Mean", "Mode"]: 
                             inner_style = "quart" 
                         else: 
@@ -550,38 +584,25 @@ else:
                             data=df_violin, 
                             x='Sample', 
                             y='Size',
-                            hue='Sample', # FIXED: Forces proper color mapping and builds legend handles
+                            hue='Sample',
                             palette=palette_dict, 
                             inner=inner_style,
                             linewidth=line_width,
                             ax=ax
                         )
                         
-                        # Style the axes for vertical orientation
                         ax.set_xlabel("")
                         ax.tick_params(colors=axes_color, labelsize=label_size)
-                        
-                        # Rotate sample names if they are long so they don't overlap
                         plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
                         
-                        # FIXED: Pass 'show_legend' to the styling function
                         apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=show_legend)
-                        
-                        # Limit the Y-axis to your sidebar slider max
                         ax.set_ylim(0, max_x_size)
-                        
-                        # Apply custom styling (Tell it NOT to draw the broken legend)
                         apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=False)
                         
-                        # --- FIXED: Manually construct a perfect color-coded legend ---
                         if show_legend:
                             import matplotlib.patches as mpatches
                             leg_size = legend_size if 'legend_size' in locals() else label_size
-                            
-                            # Create a colorful square (patch) for every single sample
                             legend_patches = [mpatches.Patch(facecolor=ent['color'], edgecolor=axes_color, label=ent['label']) for ent in entities]
-                            
-                            # Draw it!
                             leg = ax.legend(handles=legend_patches, loc=legend_position, facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color, fontsize=leg_size)
                             leg.get_frame().set_linewidth(axes_width)
                         
@@ -594,7 +615,18 @@ else:
                 summary_list = []
                 for ent in entities:
                     d = ent["data"]
-                    summary_list.append({"Sample": ent["label"], "Count": len(d), "Mean (nm)": round(d.mean(), 1), "Median (nm)": round(d.median(), 1), "Mode (nm)": round(get_mode_from_kde(d), 1), "SD (nm)": round(d.std(), 1), "MAD (nm)": round(get_mad(d), 1), "Span": round(get_span(d), 3), "FWHM (nm)": round(get_fwhm_from_kde(d), 1)})
+                    # --- FIXED: The Mode uses the new stable math ---
+                    summary_list.append({
+                        "Sample": ent["label"], 
+                        "Count": len(d), 
+                        "Mean (nm)": round(d.mean(), 1), 
+                        "Median (nm)": round(d.median(), 1), 
+                        "Mode (nm)": calculate_stable_mode(d), 
+                        "SD (nm)": round(d.std(), 1), 
+                        "MAD (nm)": round(get_mad(d), 1), 
+                        "Span": round(get_span(d), 3), 
+                        "FWHM (nm)": round(get_fwhm_from_kde(d), 1)
+                    })
                 st.dataframe(pd.DataFrame(summary_list), use_container_width=True)
                 
                 if len(entities) > 1:
