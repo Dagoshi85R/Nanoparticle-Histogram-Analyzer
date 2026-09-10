@@ -323,20 +323,20 @@ def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, col
     x_data = data[feature_col].dropna()
     if len(x_data) == 0: return
     
-    # 1. Mathematically bin the data exactly like ZetaSphere
+    # Mathematically bin the data exactly like ZetaSphere
     counts, edges = np.histogram(x_data, bins=bins)
     
-    # 2. Calculate the exact center of each bin for the line points
+    # Calculate the exact center of each bin for the line points
     centers = edges[:-1] + (bin_width / 2)
     
-    # 3. Anchor the line to 0 on the X-axis by prepending 0 to the math
-    centers_line = np.concatenate(([0], centers, [edges[-1] + (bin_width / 2)]))
+    # Dynamically anchor to the start/end of the bins so it works for negative Zeta values!
+    centers_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
     counts_line = np.concatenate(([0], counts, [0]))
     
     hist_lbl = label if display_style == "Histogram Only" else None
     curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
-    # Draw Bars (Now connected to the line_width slider!)
+    # Draw Bars 
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
         ax.hist(x_data, bins=bins, color=color, alpha=0.3, edgecolor=color, linewidth=line_width, label=hist_lbl)
         
@@ -675,7 +675,7 @@ else:
                     if not bubble_mode:
                         scatter_dot_size = st.slider("Scatter Dot Size", min_value=5, max_value=200, value=50, step=5)
                     else:
-                        scatter_dot_size = 50 # Fallback
+                        scatter_dot_size = 50 
                 
             with col4:
                 bins = np.arange(min_x_zeta, max_x_zeta + zeta_bin_width, zeta_bin_width)
@@ -699,7 +699,6 @@ else:
                             if f_col:
                                 z_entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "df": item['df'], "color": item['color'], "style": style})
 
-                # --- FIXED: Mathematical Override for True Full Spectrum ---
                 if z_entities and palette_choice != "Custom (Sample Colors)":
                     palette_name = PALETTES[palette_choice]
                     discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
@@ -707,12 +706,10 @@ else:
                     if palette_name in discrete_palettes:
                         hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(z_entities))).as_hex()
                     else:
-                        # Pull the entire 256-color gradient
                         full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                         if len(z_entities) == 1:
-                            hex_colors = [full_pal[128]] # Center color
+                            hex_colors = [full_pal[128]] 
                         else:
-                            # Force the math to stretch from exactly 0 to exactly 255
                             indices = np.linspace(0, 255, len(z_entities)).astype(int)
                             hex_colors = [full_pal[idx] for idx in indices]
                             
@@ -756,30 +753,31 @@ else:
                         ax_zeta.set_facecolor(bg_color)
                         
                         max_h = 0
-                        kdes = []
+                        poly_data = []
                         for ent in z_entities:
-                            if len(ent['data']) > 1:
-                                y_c = gaussian_kde(ent['data'])(x_vals) * len(ent['data']) * zeta_bin_width
-                                max_h = max(max_h, max(y_c))
-                                kdes.append((y_c, ent))
+                            clean_data = ent['data'].dropna()
+                            if len(clean_data) > 1:
+                                # Apply the same dynamic histogram anchoring for Zeta Ridgelines
+                                counts, edges = np.histogram(clean_data, bins=bins)
+                                centers = edges[:-1] + (zeta_bin_width / 2)
+                                x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                y_line = np.concatenate(([0], counts, [0]))
+                                
+                                max_h = max(max_h, max(y_line))
+                                poly_data.append((x_line, y_line, ent))
                             else:
-                                kdes.append((None, ent))
+                                poly_data.append((None, None, ent))
                                 
                         offset_step = max_h * 0.4 if max_h > 0 else 1
                         y_ticks, y_labels = [], []
                         
-                        for i, (y_c, ent) in enumerate(reversed(kdes)):
+                        for i, (x_line, y_line, ent) in enumerate(reversed(poly_data)):
                             current_offset = i * offset_step
-                            if y_c is not None:
-                                ax_zeta.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
-                                ax_zeta.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
+                            if y_line is not None:
+                                ax_zeta.fill_between(x_line, current_offset, y_line + current_offset, color=ent['color'], alpha=0.6)
+                                ax_zeta.plot(x_line, y_line + current_offset, color=ent['color'], lw=line_width)
                                 if central_marker != "None":
-                                    val = np.nan
-                                    if central_marker == "Median": val = ent['data'].median()
-                                    elif central_marker == "Mode": val = get_mode_from_kde(ent['data'])
-                                    elif central_marker == "Mean": val = ent['data'].mean()
-                                    if pd.notna(val):
-                                        ax_zeta.vlines(val, current_offset, current_offset + max(y_c), color=ent['color'], linestyle=':', lw=1.5, alpha=0.8)
+                                    plot_central_marker(ax_zeta, ent['data'], ent['color'], central_marker)
                             ax_zeta.axhline(current_offset, color=axes_color, lw=0.5, alpha=0.4)
                             y_ticks.append(current_offset)
                             y_labels.append(ent['label'])
@@ -806,20 +804,27 @@ else:
                     z_col = find_data_column(combined_marg_df, ['zeta potential'])
                     
                     if s_col and z_col:
+                        # 1. Build the Blank JointGrid Base
+                        jg = sns.JointGrid(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict)
+                        
+                        # 2. Draw the Scatter Plot (Joint)
                         if bubble_mode:
-                            # Automatically find remaining numeric columns
                             numeric_cols = combined_marg_df.select_dtypes(include=[np.number]).columns.tolist()
                             valid_bubble_cols = [c for c in numeric_cols if c.lower() not in [s_col.lower(), z_col.lower(), 'channel']]
                             
                             if valid_bubble_cols:
                                 bubble_col = st.selectbox("Select Variable for Bubble Size:", valid_bubble_cols)
-                                jg = sns.jointplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, alpha=0.5, marginal_kws=dict(fill=True), joint_kws={'size': combined_marg_df[bubble_col], 'sizes': (20, 500)})
+                                sns.scatterplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, size=bubble_col, sizes=(20, 500), alpha=0.5, ax=jg.ax_joint)
                             else:
                                 st.warning("No suitable 3rd numeric variable found.")
-                                jg = sns.jointplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, alpha=0.6, marginal_kws=dict(fill=True), joint_kws={'s': scatter_dot_size})
+                                sns.scatterplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, s=scatter_dot_size, alpha=0.6, ax=jg.ax_joint)
                         else:
-                            jg = sns.jointplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, alpha=0.6, marginal_kws=dict(fill=True), joint_kws={'s': scatter_dot_size})
+                            sns.scatterplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, s=scatter_dot_size, alpha=0.6, ax=jg.ax_joint)
                             
+                        # 3. Draw the Marginal Polygons (Forces anchored histograms instead of KDE!)
+                        sns.histplot(data=combined_marg_df, x=s_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_x, legend=False)
+                        sns.histplot(data=combined_marg_df, y=z_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_y, legend=False)
+                        
                         jg.fig.patch.set_facecolor(bg_color)
                         jg.ax_joint.set_facecolor(bg_color)
                         jg.ax_marg_x.set_facecolor(bg_color)
@@ -828,20 +833,29 @@ else:
                         jg.ax_joint.set_xlabel("Hydrodynamic Diameter (nm)", color=axes_color, fontsize=label_size)
                         jg.ax_joint.set_ylabel("Zeta Potential (mV)", color=axes_color, fontsize=label_size)
                         jg.ax_joint.tick_params(colors=axes_color, labelsize=label_size, width=axes_width)
+                        
                         for spine in jg.ax_joint.spines.values(): 
                             spine.set_color(axes_color)
                             spine.set_linewidth(axes_width)
                             
-                        # Apply thickness and colors to the marginal histogram axes
                         for ax_marg in [jg.ax_marg_x, jg.ax_marg_y]:
                             ax_marg.tick_params(colors=axes_color, width=axes_width)
                             for spine in ax_marg.spines.values():
                                 spine.set_color(axes_color)
                                 spine.set_linewidth(axes_width)
+                                
                         if show_grid: jg.ax_joint.grid(True, linestyle='--', linewidth=0.5, alpha=0.3, color=axes_color)
                         
+                        # --- 4. FIXED LEGEND POSITIONING ---
                         if show_legend and jg.ax_joint.get_legend():
-                            leg = jg.ax_joint.get_legend()
+                            # Extract the raw legend data
+                            handles, labels = jg.ax_joint.get_legend_handles_labels()
+                            existing_leg = jg.ax_joint.get_legend()
+                            leg_title = existing_leg.get_title().get_text() if existing_leg.get_title() else "Sample"
+                            
+                            # Rebuild the legend exactly where the user asked for it
+                            leg = jg.ax_joint.legend(handles=handles, labels=labels, loc=legend_position, fontsize=legend_size, title=leg_title)
+                            
                             for text in leg.get_texts(): 
                                 text.set_color(axes_color)
                                 text.set_fontsize(legend_size)
@@ -850,6 +864,7 @@ else:
                                 leg.get_title().set_fontsize(legend_size)
                             leg.get_frame().set_facecolor(bg_color)
                             leg.get_frame().set_edgecolor(axes_color)
+                            leg.get_frame().set_linewidth(axes_width)
                             
                         elif not show_legend and jg.ax_joint.get_legend():
                             jg.ax_joint.get_legend().remove()
@@ -862,7 +877,8 @@ else:
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Zeta Potential)")
             if z_entities:
-                summary_list = [{"Sample": ent["label"], "Count": len(ent["data"]), "Mean (mV)": round(ent["data"].mean(), 1), "SD (mV)": round(ent["data"].std(), 1)} for ent in z_entities]
+                # FIXED: Added the stable calculate_stable_mode to the statistics dataframe!
+                summary_list = [{"Sample": ent["label"], "Count": len(ent["data"]), "Mean (mV)": round(ent["data"].mean(), 1), "Mode (mV)": calculate_stable_mode(ent["data"]), "SD (mV)": round(ent["data"].std(), 1)} for ent in z_entities]
                 st.dataframe(pd.DataFrame(summary_list), use_container_width=True)
                 
                 if len(z_entities) > 1:
