@@ -1176,27 +1176,34 @@ else:
                                     indices = np.linspace(0, 255, len(pops)).astype(int)
                                     pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                             
-                            # --- FIXED: Custom Polygon Generation for Sub-Populations (Clean Edges) ---
-                            for pop in pops:
-                                p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
-                                if len(p_data) == 0: continue
-                                c = pop_color_dict[pop]
-                                
-                                counts, edges = np.histogram(p_data, bins=bins_ext)
-                                centers = edges[:-1] + (gmm_bin_width / 2)
-                                x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
-                                y_line = np.concatenate(([0], counts, [0]))
-                                
-                                pop_lbl = f"Pop {pop}"
-                                if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-                                    # Draw outline, then fill
-                                    ax2.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
-                                    ax2.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
+                            # --- FIXED: Dynamic Toggle for Sub-Populations ---
+                                for pop in pops:
+                                    p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
+                                    if len(p_data) == 0: continue
+                                    c = pop_color_dict[pop]
                                     
-                                if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-                                    ax2.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
-                                    if display_style == "Smooth Curve Only":
-                                        ax2.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
+                                    if globals().get('use_kde', False) and len(p_data) > 1:
+                                        # 1. Smooth KDE Math (Evaluated strictly >= 0)
+                                        x_line = x_vals_ext
+                                        y_line = gaussian_kde(p_data)(x_vals_ext) * len(p_data) * gmm_bin_width
+                                    else:
+                                        # 2. Strict Polygon Math
+                                        counts, edges = np.histogram(p_data, bins=bins_ext)
+                                        centers = edges[:-1] + (gmm_bin_width / 2)
+                                        x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                        y_line = np.concatenate(([0], counts, [0]))
+                                    
+                                    pop_lbl = f"Pop {pop}"
+                                    if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
+                                        ax_target = ax2 if 'ax2' in locals() and num_channels == 1 else ax_sub
+                                        ax_target.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                        ax_target.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
+                                        
+                                    if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
+                                        ax_target = ax2 if 'ax2' in locals() and num_channels == 1 else ax_sub
+                                        ax_target.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
+                                        if display_style == "Smooth Curve Only":
+                                            ax_target.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
 
                             if central_marker != "None":
                                 for pop in pops:
@@ -1258,27 +1265,34 @@ else:
                                         indices = np.linspace(0, 255, len(pops)).astype(int)
                                         pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                                 
-                                # --- FIXED: Custom Polygon Generation for Sub-Populations (Clean Edges) ---
+                                # --- FIXED: Dynamic Toggle for Sub-Populations ---
                                 for pop in pops:
                                     p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
                                     if len(p_data) == 0: continue
                                     c = pop_color_dict[pop]
                                     
-                                    counts, edges = np.histogram(p_data, bins=bins_ext)
-                                    centers = edges[:-1] + (gmm_bin_width / 2)
-                                    x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
-                                    y_line = np.concatenate(([0], counts, [0]))
+                                    if globals().get('use_kde', False) and len(p_data) > 1:
+                                        # 1. Smooth KDE Math (Evaluated strictly >= 0)
+                                        x_line = x_vals_ext
+                                        y_line = gaussian_kde(p_data)(x_vals_ext) * len(p_data) * gmm_bin_width
+                                    else:
+                                        # 2. Strict Polygon Math
+                                        counts, edges = np.histogram(p_data, bins=bins_ext)
+                                        centers = edges[:-1] + (gmm_bin_width / 2)
+                                        x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                        y_line = np.concatenate(([0], counts, [0]))
                                     
                                     pop_lbl = f"Pop {pop}"
                                     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-                                        # Draw outline, then fill
-                                        ax_sub.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
-                                        ax_sub.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
+                                        ax_target = ax2 if 'ax2' in locals() and num_channels == 1 else ax_sub
+                                        ax_target.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                        ax_target.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
                                         
                                     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-                                        ax_sub.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
+                                        ax_target = ax2 if 'ax2' in locals() and num_channels == 1 else ax_sub
+                                        ax_target.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
                                         if display_style == "Smooth Curve Only":
-                                            ax_sub.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
+                                            ax_target.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
                                 
                                 if central_marker != "None":
                                     for pop in pops:
@@ -1626,23 +1640,31 @@ else:
                     max_size = morph_df['Size'].max() if pd.notna(morph_df['Size'].max()) else 1000
                     bins_t6 = np.arange(0, max_size + coloc_bin_width, coloc_bin_width)
                     
+                    # --- FIXED: Dynamic Density Plotting (KDE vs Polygon) ---
+                    max_size = morph_df['Size'].max() if pd.notna(morph_df['Size'].max()) else 1000
+                    bins_t6 = np.arange(0, max_size + coloc_bin_width, coloc_bin_width)
+                    x_vals_t6 = np.linspace(0, max_size, 500) # strictly >= 0 prevents negative bleed!
+                    
                     for i, grp in enumerate([f'Only {ch1_name}', f'Only {ch2_name}', 'Colocalized']):
                         grp_data = morph_df[morph_df['Group'] == grp]['Size'].dropna()
                         if len(grp_data) == 0: continue
                         
                         c = palette_colors[i]
-                        counts, edges = np.histogram(grp_data, bins=bins_t6)
                         
-                        # Normalize to density so the small Colocalized peak is visible against the massive Single peaks!
-                        area = counts.sum() * coloc_bin_width
-                        density = counts / area if area > 0 else counts
-                        
-                        centers = edges[:-1] + (coloc_bin_width / 2)
-                        x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
-                        y_line = np.concatenate(([0], density, [0]))
+                        if globals().get('use_kde', False) and len(grp_data) > 1:
+                            # 1. Smooth KDE Math (gaussian_kde natively calculates Density!)
+                            x_line = x_vals_t6
+                            y_line = gaussian_kde(grp_data)(x_vals_t6)
+                        else:
+                            # 2. Strict Polygon Math (Normalized manually to Density)
+                            counts, edges = np.histogram(grp_data, bins=bins_t6)
+                            area = counts.sum() * coloc_bin_width
+                            density = counts / area if area > 0 else counts
+                            centers = edges[:-1] + (coloc_bin_width / 2)
+                            x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                            y_line = np.concatenate(([0], density, [0]))
                         
                         if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-                            # Draw outline, then fill
                             ax2.hist(grp_data, bins=bins_t6, histtype='step', color=c, linewidth=line_width, density=True, label=f"{grp} (Bars)" if display_style == "Histogram Only" else None)
                             ax2.hist(grp_data, bins=bins_t6, histtype='stepfilled', color=c, alpha=0.2, linewidth=0, density=True)
                             
@@ -1651,7 +1673,6 @@ else:
                             if display_style == "Smooth Curve Only":
                                 ax2.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
 
-                        # Automatically draw the stable Mode line for QC visualization
                         plot_central_marker(ax2, grp_data, c, "Mode")
 
                     ax2.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
