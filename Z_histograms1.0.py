@@ -1493,7 +1493,7 @@ else:
             use_palette_t6 = st.checkbox("🎨 Override default colors with sidebar palette", key="tab6_color_override")
         with col_t6_2:
             # --- FIXED: Added the missing slider to control the polygon bins! ---
-            coloc_bin_width = st.slider("Size Shift Bin Width (nm)", 1, 50, 10, key="t6_bin")
+            coloc_bin_width = st.slider("Size Shift Bin Width (nm)", min_value=1, max_value=50, value=25, key="t6_bin")
         
         if not processed_data.get('Colocalization'):
             st.warning("No 'Colocalization' measurement files detected.")
@@ -1635,7 +1635,7 @@ else:
                                 ax2.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
                         # Automatically draw the stable Mode line for QC visualization
                         plot_central_marker(ax2, grp_data, c, "Mode")
-                        
+
                     ax2.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
                     ax2.set_xlabel("Hydrodynamic Diameter (nm)", color=axes_color, fontsize=label_size)
                     ax2.set_ylabel("Density", color=axes_color, fontsize=label_size)
