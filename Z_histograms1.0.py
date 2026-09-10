@@ -1487,7 +1487,13 @@ else:
     # ==========================================
     with tab6:
         st.header("Colocalization Quality & Morphology")
-        use_palette_t6 = st.checkbox("🎨 Override default colors with sidebar palette", key="tab6_color_override")
+        
+        col_t6_1, col_t6_2 = st.columns([1, 2])
+        with col_t6_1:
+            use_palette_t6 = st.checkbox("🎨 Override default colors with sidebar palette", key="tab6_color_override")
+        with col_t6_2:
+            # --- FIXED: Added the missing slider to control the polygon bins! ---
+            coloc_bin_width = st.slider("Size Shift Bin Width (nm)", 1, 50, 10, key="t6_bin")
         
         if not processed_data.get('Colocalization'):
             st.warning("No 'Colocalization' measurement files detected.")
@@ -1500,7 +1506,6 @@ else:
                 for idx, item in enumerate(active_coloc_items):
                     df = item['df'].copy()
                     
-                    # Find our necessary columns (Removed area_col requirement)
                     ch_col = find_data_column(df, ['channel'])
                     coloc_col = find_data_column(df, ['colocalised', 'colocalized'])
                     pos_col = find_data_column(df, ['position'])
@@ -1516,7 +1521,6 @@ else:
                         
                     st.subheader(f"Data for: {item['label']}")
                     
-                    # 1. Filter for ONLY colocalized particles
                     coloc_df = df[df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0'])]
                     
                     unique_chs = df[ch_col].dropna().unique()
@@ -1525,7 +1529,6 @@ else:
                     
                     matched_pairs = []
                     
-                    # 2. Iterate by position to find matches
                     for pos in coloc_df[pos_col].unique():
                         pos_data = coloc_df[coloc_df[pos_col] == pos]
                         c1_data = pos_data[pos_data[ch_col] == ch1_val]
@@ -1533,15 +1536,11 @@ else:
                         
                         if c1_data.empty or c2_data.empty: continue
                         
-                        # 3. Euclidean Distance Matrix using NumPy
                         x1, y1 = c1_data[x_col].values, c1_data[y_col].values
                         x2, y2 = c2_data[x_col].values, c2_data[y_col].values
                         
                         dist_matrix = np.sqrt((x1[:, np.newaxis] - x2)**2 + (y1[:, np.newaxis] - y2)**2)
                         
-                        # 4. Reconstruct Pairs (Trusting the machine's 'True' flag)
-                        # We find the closest pair, but we REMOVE the strict link_radius cutoff 
-                        # because ZetaSphere already verified these are colocalized.
                         for i in range(dist_matrix.shape[0]):
                             min_idx = np.argmin(dist_matrix[i])
                             
@@ -1558,22 +1557,18 @@ else:
                         st.warning("No colocalized pairs could be matched within the given Link Radius.")
                         continue
                         
-                    # Create the 2-panel plotting grid
                     w = (fig_width * 2) if 'fig_width' in locals() else 12
                     h = fig_height if 'fig_height' in locals() else 5
                     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(w, h))
                     fig.patch.set_facecolor(bg_color)
                     
-                    # Safely handle legend size if it exists in your sidebar
                     leg_size = legend_size if 'legend_size' in locals() else label_size
                     
-                    # Plot 1: Intensity Stoichiometry (Scatter)
                     sns.regplot(data=matched_df, x='C1_Intensity', y='C2_Intensity', ax=ax1, scatter_kws={'alpha': 0.5}, color='#FFD700', line_kws={'linewidth': line_width})
                     ax1.set_title("Dye Stoichiometry", color=axes_color, fontweight='bold', fontsize=title_size)
                     ax1.set_xlabel("Channel 1 Mean Intensity", color=axes_color, fontsize=label_size)
                     ax1.set_ylabel("Channel 2 Mean Intensity", color=axes_color, fontsize=label_size)
                     
-                    # --- DYNAMIC CHANNEL NAMES & COLORS ---
                     name_lower = item['filename'].lower()
                     found = []
                     for code, (c_name, color) in DEFAULT_CHANNELS.items():
@@ -1584,9 +1579,7 @@ else:
                     ch1_name = found[0][1] if len(found) >= 1 else "Channel 1"
                     ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
                     
-                    # --- FIXED: Mathematical Override for True Full Spectrum (Tab 6) ---
                     if use_palette_t6:
-                        # Fallback to viridis if they accidentally leave it on Custom Sample Colors
                         palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                         discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
                         
@@ -1607,7 +1600,6 @@ else:
                         
                     palette_colors = [ch1_color, ch2_color, coloc_color]
 
-                    # Data Prep for Size
                     single_c1 = df[(df[ch_col] == ch1_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
                     single_c2 = df[(df[ch_col] == ch2_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
                     
@@ -1616,16 +1608,38 @@ else:
                         'Size': pd.concat([single_c1[size_col], single_c2[size_col], matched_df['Colocalized_Size']], ignore_index=True)
                     })
                     
-                    # Plot 2: Hydrodynamic Size Shift (Polygon Histogram)
-                    # Bins the exact data and connects them, eliminating impossible Gaussian tails
-                    sns.histplot(
-                        data=morph_df, x='Size', hue='Group', ax=ax2, 
-                        element="poly", fill=True, stat="density", 
-                        palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend,
-                        binwidth=bin_size  # <--- Forces the curve to lock exactly to your bins
-                    )
+                    # --- FIXED: Custom Density Polygon Plotting (Replaces KDE) ---
+                    max_size = morph_df['Size'].max() if pd.notna(morph_df['Size'].max()) else 1000
+                    bins_t6 = np.arange(0, max_size + coloc_bin_width, coloc_bin_width)
+                    
+                    for i, grp in enumerate([f'Only {ch1_name}', f'Only {ch2_name}', 'Colocalized']):
+                        grp_data = morph_df[morph_df['Group'] == grp]['Size'].dropna()
+                        if len(grp_data) == 0: continue
+                        
+                        c = palette_colors[i]
+                        counts, edges = np.histogram(grp_data, bins=bins_t6)
+                        
+                        # Normalize to density so the small Colocalized peak is visible against the massive Single peaks!
+                        area = counts.sum() * coloc_bin_width
+                        density = counts / area if area > 0 else counts
+                        
+                        centers = edges[:-1] + (coloc_bin_width / 2)
+                        x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                        y_line = np.concatenate(([0], density, [0]))
+                        
+                        if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
+                            ax2.hist(grp_data, bins=bins_t6, color=c, alpha=0.3, edgecolor=c, linewidth=line_width, density=True, label=f"{grp} (Bars)" if display_style == "Histogram Only" else None)
+                        if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
+                            ax2.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=grp)
+                            if display_style == "Smooth Curve Only":
+                                ax2.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
+
+                    ax2.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
+                    ax2.set_xlabel("Hydrodynamic Diameter (nm)", color=axes_color, fontsize=label_size)
+                    ax2.set_ylabel("Density", color=axes_color, fontsize=label_size)
+                    ax2.set_xlim(left=0)
+                    ax2.set_ylim(bottom=0)
                                         
-                    # Polish axes and typography
                     for ax in [ax1, ax2]:
                         ax.tick_params(colors=axes_color, labelsize=label_size, width=axes_width)
                         for spine in ax.spines.values(): 
@@ -1633,12 +1647,12 @@ else:
                             spine.set_linewidth(axes_width)
                         ax.set_facecolor(bg_color)
                         
-                    # Style the legend for the KDE plot (tied to the sidebar toggle)
                     if show_legend:
-                        legend = ax2.get_legend()
+                        legend = ax2.legend(loc=legend_position, fontsize=leg_size)
                         if legend is not None:
                             plt.setp(legend.get_texts(), color=axes_color, fontsize=leg_size)
-                            plt.setp(legend.get_title(), color=axes_color, fontsize=leg_size, fontweight='bold')
+                            if legend.get_title():
+                                plt.setp(legend.get_title(), color=axes_color, fontsize=leg_size, fontweight='bold')
                             legend.get_frame().set_facecolor(bg_color)
                             legend.get_frame().set_edgecolor(axes_color)
                             legend.get_frame().set_linewidth(axes_width)
@@ -1646,7 +1660,6 @@ else:
                     plt.tight_layout()
                     st.pyplot(fig)
                     
-                    # Image Download Buttons
                     safe_filename = f"Coloc_Quality_{item['label'].replace(' ', '_')}"
                     create_download_buttons(fig, safe_filename)
                     plt.close(fig)
@@ -1669,18 +1682,15 @@ else:
                     stat_cols[2].metric("Correlation Quality", score)
                     st.info(f"**Interpretation:** {exp}")
 
-                    # --- Size Statistics ---
+                    # --- FIXED: Upgraded Size Statistics to Stable Mode ---
                     st.markdown("### 🔬 Hydrodynamic Size Summary")
 
-                    med_size_c1 = morph_df[morph_df['Group'] == f'Only {ch1_name}']['Size'].median()
-                    med_size_c2 = morph_df[morph_df['Group'] == f'Only {ch2_name}']['Size'].median()
-                    med_size_coloc = morph_df[morph_df['Group'] == 'Colocalized']['Size'].median()
+                    mode_size_c1 = calculate_stable_mode(morph_df[morph_df['Group'] == f'Only {ch1_name}']['Size'])
+                    mode_size_c2 = calculate_stable_mode(morph_df[morph_df['Group'] == f'Only {ch2_name}']['Size'])
+                    mode_size_coloc = calculate_stable_mode(morph_df[morph_df['Group'] == 'Colocalized']['Size'])
                     
-                    med_size_c1 = med_size_c1 if pd.notna(med_size_c1) else 0
-                    med_size_c2 = med_size_c2 if pd.notna(med_size_c2) else 0
-                    
-                    avg_single_size = (med_size_c1 + med_size_c2) / 2
-                    size_ratio = med_size_coloc / avg_single_size if avg_single_size > 0 else 1
+                    avg_single_size = (mode_size_c1 + mode_size_c2) / 2
+                    size_ratio = mode_size_coloc / avg_single_size if avg_single_size > 0 else 1
                     
                     if size_ratio >= 1.2:
                         size_score, size_exp = "🔴 Shift Detected", "Colocalized particles have a notably larger hydrodynamic diameter. The dual-labeling may be inducing aggregation, or the dyes are selectively binding to larger particles in the overall population."
@@ -1688,9 +1698,9 @@ else:
                         size_score, size_exp = "🟢 Consistent Size", "Dual-labeled particles share a nearly identical hydrodynamic size with single-labeled particles, confirming that dual-labeling does not severely alter their physical profile."
 
                     size_cols = st.columns(4)
-                    size_cols[0].metric(f"{ch1_name} Median Size", f"{round(med_size_c1, 1)} nm")
-                    size_cols[1].metric(f"{ch2_name} Median Size", f"{round(med_size_c2, 1)} nm")
-                    size_cols[2].metric("Coloc. Median Size", f"{round(med_size_coloc, 1)} nm")
+                    size_cols[0].metric(f"{ch1_name} Mode Size", f"{round(mode_size_c1, 1)} nm")
+                    size_cols[1].metric(f"{ch2_name} Mode Size", f"{round(mode_size_c2, 1)} nm")
+                    size_cols[2].metric("Coloc. Mode Size", f"{round(mode_size_coloc, 1)} nm")
                     size_cols[3].metric("Size Status", size_score)
                     st.info(f"**Interpretation:** {size_exp}")
                     
@@ -1698,11 +1708,11 @@ else:
                     qc_data = {
                         "Metric": [
                             "Pearson Correlation (r)", "R-squared (R²)", "Correlation Quality", "Correlation Interpretation",
-                            f"{ch1_name} Median Size (nm)", f"{ch2_name} Median Size (nm)", "Colocalized Median Size (nm)", "Size Status", "Size Interpretation"
+                            f"{ch1_name} Mode Size (nm)", f"{ch2_name} Mode Size (nm)", "Colocalized Mode Size (nm)", "Size Status", "Size Interpretation"
                         ],
                         "Value": [
                             round(r_val, 3), round(r_sq, 3), score, exp,
-                            round(med_size_c1, 1), round(med_size_c2, 1), round(med_size_coloc, 1), size_score, size_exp
+                            round(mode_size_c1, 1), round(mode_size_c2, 1), round(mode_size_coloc, 1), size_score, size_exp
                         ]
                     }
                     
