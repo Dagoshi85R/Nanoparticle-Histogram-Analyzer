@@ -319,9 +319,12 @@ def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, col
     hist_lbl = label if display_style == "Histogram Only" else None
     curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
-    # Draw Bars 
+    # --- FIXED: Draw clean exterior lines without vertical dividers ---
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-        ax.hist(x_data, bins=bins, color=color, alpha=0.3, edgecolor=color, linewidth=line_width, label=hist_lbl)
+        # 1. Draw the solid exterior outline
+        ax.hist(x_data, bins=bins, histtype='step', color=color, linewidth=line_width, linestyle=style, label=hist_lbl)
+        # 2. Draw the soft fill inside
+        ax.hist(x_data, bins=bins, histtype='stepfilled', color=color, alpha=0.2, linewidth=0)
         
     # Draw Anchored Polygon Line
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
@@ -1151,7 +1154,7 @@ else:
                                     indices = np.linspace(0, 255, len(pops)).astype(int)
                                     pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                             
-                            # --- FIXED: Custom Polygon Generation for Sub-Populations ---
+                            # --- FIXED: Custom Polygon Generation for Sub-Populations (Clean Edges) ---
                             for pop in pops:
                                 p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
                                 if len(p_data) == 0: continue
@@ -1164,7 +1167,10 @@ else:
                                 
                                 pop_lbl = f"Pop {pop}"
                                 if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-                                    ax2.hist(p_data, bins=bins_ext, color=c, alpha=0.3, edgecolor=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                    # Draw outline, then fill
+                                    ax2.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                    ax2.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
+                                    
                                 if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
                                     ax2.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
                                     if display_style == "Smooth Curve Only":
@@ -1230,7 +1236,7 @@ else:
                                         indices = np.linspace(0, 255, len(pops)).astype(int)
                                         pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                                 
-                                # --- FIXED: Custom Polygon Generation for Sub-Populations ---
+                                # --- FIXED: Custom Polygon Generation for Sub-Populations (Clean Edges) ---
                                 for pop in pops:
                                     p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
                                     if len(p_data) == 0: continue
@@ -1243,7 +1249,10 @@ else:
                                     
                                     pop_lbl = f"Pop {pop}"
                                     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-                                        ax_sub.hist(p_data, bins=bins_ext, color=c, alpha=0.3, edgecolor=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                        # Draw outline, then fill
+                                        ax_sub.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                        ax_sub.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
+                                        
                                     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
                                         ax_sub.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
                                         if display_style == "Smooth Curve Only":
@@ -1591,7 +1600,7 @@ else:
                         'Size': pd.concat([single_c1[size_col], single_c2[size_col], matched_df['Colocalized_Size']], ignore_index=True)
                     })
                     
-                    # --- FIXED: Custom Density Polygon Plotting (Replaces KDE) ---
+                    # --- FIXED: Custom Density Polygon Plotting (Clean Edges) ---
                     max_size = morph_df['Size'].max() if pd.notna(morph_df['Size'].max()) else 1000
                     bins_t6 = np.arange(0, max_size + coloc_bin_width, coloc_bin_width)
                     
@@ -1611,11 +1620,15 @@ else:
                         y_line = np.concatenate(([0], density, [0]))
                         
                         if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-                            ax2.hist(grp_data, bins=bins_t6, color=c, alpha=0.3, edgecolor=c, linewidth=line_width, density=True, label=f"{grp} (Bars)" if display_style == "Histogram Only" else None)
+                            # Draw outline, then fill
+                            ax2.hist(grp_data, bins=bins_t6, histtype='step', color=c, linewidth=line_width, density=True, label=f"{grp} (Bars)" if display_style == "Histogram Only" else None)
+                            ax2.hist(grp_data, bins=bins_t6, histtype='stepfilled', color=c, alpha=0.2, linewidth=0, density=True)
+                            
                         if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
                             ax2.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=grp)
                             if display_style == "Smooth Curve Only":
                                 ax2.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
+
                         # Automatically draw the stable Mode line for QC visualization
                         plot_central_marker(ax2, grp_data, c, "Mode")
 
