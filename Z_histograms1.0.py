@@ -336,9 +336,9 @@ def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, col
     hist_lbl = label if display_style == "Histogram Only" else None
     curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
-    # Draw Bars
+    # Draw Bars (Now connected to the line_width slider!)
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-        ax.hist(x_data, bins=bins, color=color, alpha=0.3, edgecolor=color, label=hist_lbl)
+        ax.hist(x_data, bins=bins, color=color, alpha=0.3, edgecolor=color, linewidth=line_width, label=hist_lbl)
         
     # Draw Anchored Polygon Line
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
