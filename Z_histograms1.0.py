@@ -11,6 +11,27 @@ import math
 from sklearn.mixture import GaussianMixture
 from scipy.stats import gaussian_kde, mannwhitneyu, wasserstein_distance, anderson_ksamp
 
+
+def calculate_stable_mode(size_array):
+    """Calculates a high-resolution, mathematically stable peak (mode) independent of visual bin size."""
+    clean_data = size_array.dropna()
+    if len(clean_data) == 0:
+        return 0
+        
+    # Create a mathematical density curve of the raw data
+    kde = gaussian_kde(clean_data)
+    
+    # Create a fine, 1-nm resolution grid covering the data's range
+    x_grid = np.linspace(clean_data.min(), clean_data.max(), 1000)
+    
+    # Evaluate the curve and find the exact peak
+    kde_values = kde.evaluate(x_grid)
+    peak_index = np.argmax(kde_values)
+    
+    # Return the exact x-value of that peak with 1 decimal place
+    return round(x_grid[peak_index], 1)
+
+
 # --- Configuration & Styling ---
 st.set_page_config(page_title="Nanoparticle Multi-Sample Web Analyzer", layout="wide")
 
@@ -100,35 +121,18 @@ with st.sidebar:
 
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
 
-    st.markdown("---")
-    st.subheader("Advanced Data Filtering")
-    expert_filtering = st.checkbox("Filtering data - experts only")
-        
-    if expert_filtering:
-        min_trace_length = st.slider(
-            "Minimum Trace Length (Frames)", 
-            min_value=1, max_value=50, value=1, step=1, 
-            help="Filter out particles tracked for too few frames."
-        )
-        st.info("💡 **Note:** The manufacturer recommended link radius is 10 pixels.")
-        link_radius = st.slider(
-            "Link Radius (Pixels)", 
-            min_value=1.0, max_value=30.0, value=10.0, step=1.0, 
-            help="The spatial tolerance used to match moving particles between the two consecutive laser recordings."
-        )
-    else:
-        # Safe defaults when hidden
-        min_trace_length = 1
-        link_radius = 10.0
+    # Invisible safe defaults to prevent NameErrors in other tabs
+    min_trace_length = 1
+    link_radius = 10.0
 
     # --- NEW: Help Guide Link Button ---
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("📖 Documentation")
-        st.sidebar.link_button(
-            label="View Help Guide (PDF)", 
-            url="https://github.com/Dagoshi85R/Nanoparticle-Histogram-Analyzer/blob/main/Histogram_Analyzer_1.514.pdf",
-            use_container_width=True
-        )
+    st.markdown("---")
+    st.subheader("📖 Documentation")
+    st.link_button(
+        label="View Help Guide (PDF)", 
+        url="https://github.com/Dagoshi85R/Nanoparticle-Histogram-Analyzer/blob/main/Histogram_Analyzer_1.514.pdf",
+        use_container_width=True
+    )
 
 # --- Helper Functions ---
 def parse_file_info(uploaded_file):
@@ -258,6 +262,9 @@ def apply_custom_style(ax, title, xlabel, ylabel, xlim, bg, fg, grid, draw_legen
     ax.set_ylabel(ylabel, color=fg, fontsize=label_size)
     if xlim is not None: ax.set_xlim(xlim)
     
+# --- FIXED: Removes the empty white space below the zero line on "only smoothbar" ---
+    ax.set_ylim(bottom=0)
+
     # Apply tick size and axis box thickness
     ax.tick_params(colors=fg, labelsize=label_size, width=axes_width)
     for spine in ax.spines.values(): 
@@ -299,23 +306,34 @@ def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, col
     x_data = data[feature_col].dropna()
     if len(x_data) == 0: return
     
+    # Mathematically bin the data exactly like ZetaSphere
+    counts, edges = np.histogram(x_data, bins=bins)
+    
+    # Calculate the exact center of each bin for the line points
+    centers = edges[:-1] + (bin_width / 2)
+    
+    # Dynamically anchor to the start/end of the bins so it works for negative Zeta values!
+    centers_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+    counts_line = np.concatenate(([0], counts, [0]))
+    
     hist_lbl = label if display_style == "Histogram Only" else None
     curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
+    # Draw Bars 
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-        ax.hist(x_data, bins=bins, histtype='step', color=color, linestyle=style, linewidth=line_width, label=hist_lbl)
-        if display_style == "Both (Bar + Curve)":
-            ax.hist(x_data, bins=bins, histtype='stepfilled', color=color, alpha=0.1)
-            
+        ax.hist(x_data, bins=bins, color=color, alpha=0.3, edgecolor=color, linewidth=line_width, label=hist_lbl)
+        
+    # Draw Anchored Polygon Line
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-        if len(x_data) > 1:
-            y_counts = gaussian_kde(x_data)(x_vals) * len(x_data) * bin_width
-            ax.plot(x_vals, y_counts, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+        ax.plot(centers_line, counts_line, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+        # Optional: Adds a very faint fill under the curve for better visibility
+        if display_style == "Smooth Curve Only":
+            ax.fill_between(centers_line, 0, counts_line, color=color, alpha=0.1)
 
 def plot_central_marker(ax, data, color, marker_type):
     val = np.nan
     if marker_type == "Median": val = data.median()
-    elif marker_type == "Mode": val = get_mode_from_kde(data)
+    elif marker_type == "Mode": val = calculate_stable_mode(data) # <-- Now uses the stable ZetaSphere math!
     elif marker_type == "Mean": val = data.mean()
     
     if pd.notna(val):
@@ -402,6 +420,9 @@ else:
                 size_bin_width = st.slider("Size Bin Width (nm)", 1, 50, 10, key="s_bin")
                 max_x_size = st.number_input("Max X-Axis Limit (nm)", 100, 2000, 1000, key="s_max")
                 
+                # --- NEW: Logarithmic Scale Checkbox ---
+                log_x = st.checkbox("Logarithmic Scale", value=False, key="s_log_x", help="Applies a base-10 logarithmic scale to the size axis.")
+                
                 has_replicates = any(len([i for i in items if i['active']]) > 1 for items in processed_data['Size'].values())
                 rep_mode = "Treat Independent"
                 if has_replicates:
@@ -412,6 +433,9 @@ else:
                 bins = np.arange(0, max_x_size + size_bin_width, size_bin_width)
                 x_vals = np.linspace(0, max_x_size, 500)
                 line_styles = ['-', '--', ':', '-.']
+                
+                # Math fix: You cannot take the log of 0, so we start at 10nm if log is checked.
+                current_limit = (10, max_x_size) if log_x else (0, max_x_size)
                 
                 entities = []
                 for ch in active_channels:
@@ -430,7 +454,6 @@ else:
                             if f_col:
                                 entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "color": item['color'], "style": style})
 
-                # --- FIXED: Mathematical Override for True Full Spectrum (Tab 1) ---
                 if entities and palette_choice != "Custom (Sample Colors)":
                     palette_name = PALETTES[palette_choice]
                     discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
@@ -438,12 +461,10 @@ else:
                     if palette_name in discrete_palettes:
                         hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(entities))).as_hex()
                     else:
-                        # Pull the entire 256-color gradient
                         full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                         if len(entities) == 1:
-                            hex_colors = [full_pal[128]] # Center color
+                            hex_colors = [full_pal[128]] 
                         else:
-                            # Force the math to stretch from exactly 0 to exactly 255
                             indices = np.linspace(0, 255, len(entities)).astype(int)
                             hex_colors = [full_pal[idx] for idx in indices]
                             
@@ -456,11 +477,15 @@ else:
                     if multi_layout == "Overlay (Default)":
                         fig, ax = plt.subplots(figsize=(10, 5))
                         fig.patch.set_facecolor(bg_color)
+                        
+                        if log_x: ax.set_xscale('log')
+                        
                         for ent in entities:
                             tmp_df = pd.DataFrame({'val': ent['data']})
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
-                        apply_custom_style(ax, "Size Distribution", "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=show_legend)
+                        
+                        apply_custom_style(ax, "Size Distribution", "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=show_legend)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
 
@@ -473,10 +498,13 @@ else:
                         
                         for i, ent in enumerate(entities):
                             ax = axes[i // cols, i % cols]
+                            if log_x: ax.set_xscale('log')
+                                
                             tmp_df = pd.DataFrame({'val': ent['data']})
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
-                            apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
+                            
+                            apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
                             
                         for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
@@ -488,31 +516,33 @@ else:
                         fig.patch.set_facecolor(bg_color)
                         ax.set_facecolor(bg_color)
                         
+                        if log_x: ax.set_xscale('log')
+                        
                         max_h = 0
-                        kdes = []
+                        poly_data = []
                         for ent in entities:
-                            if len(ent['data']) > 1:
-                                y_c = gaussian_kde(ent['data'])(x_vals) * len(ent['data']) * size_bin_width
-                                max_h = max(max_h, max(y_c))
-                                kdes.append((y_c, ent))
+                            clean_data = ent['data'].dropna()
+                            if len(clean_data) > 1:
+                                counts, edges = np.histogram(clean_data, bins=bins)
+                                centers = edges[:-1] + (size_bin_width / 2)
+                                x_line = np.concatenate(([0], centers, [edges[-1] + (size_bin_width / 2)]))
+                                y_line = np.concatenate(([0], counts, [0]))
+                                
+                                max_h = max(max_h, max(y_line))
+                                poly_data.append((x_line, y_line, ent))
                             else:
-                                kdes.append((None, ent))
+                                poly_data.append((None, None, ent))
                                 
                         offset_step = max_h * 0.4 if max_h > 0 else 1 
                         y_ticks, y_labels = [], []
                         
-                        for i, (y_c, ent) in enumerate(reversed(kdes)):
+                        for i, (x_line, y_line, ent) in enumerate(reversed(poly_data)):
                             current_offset = i * offset_step
-                            if y_c is not None:
-                                ax.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
-                                ax.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
+                            if y_line is not None:
+                                ax.fill_between(x_line, current_offset, y_line + current_offset, color=ent['color'], alpha=0.6)
+                                ax.plot(x_line, y_line + current_offset, color=ent['color'], lw=line_width)
                                 if central_marker != "None":
-                                    val = np.nan
-                                    if central_marker == "Median": val = ent['data'].median()
-                                    elif central_marker == "Mode": val = get_mode_from_kde(ent['data'])
-                                    elif central_marker == "Mean": val = ent['data'].mean()
-                                    if pd.notna(val):
-                                        ax.vlines(val, current_offset, current_offset + max(y_c), color=ent['color'], linestyle=':', lw=1.5, alpha=0.8)
+                                    plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                                         
                             ax.axhline(current_offset, color=axes_color, lw=0.5, alpha=0.4)
                             y_ticks.append(current_offset)
@@ -520,12 +550,11 @@ else:
                             
                         ax.set_yticks(y_ticks)
                         ax.set_yticklabels(y_labels, color=axes_color)
-                        apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
+                        apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
 
                     elif multi_layout == "Violin Plot":
-                        # Prepare data into a single DataFrame for Seaborn
                         violin_data = []
                         palette_dict = {}
                         for ent in entities:
@@ -534,54 +563,31 @@ else:
                             palette_dict[ent['label']] = ent['color']
                             
                         df_violin = pd.concat(violin_data, ignore_index=True)
-                        
-                        # FIXED: Use a standard landscape width (10) so Streamlit doesn't stretch the height!
                         fig, ax = plt.subplots(figsize=(10, 6))
                         fig.patch.set_facecolor(bg_color)
                         
-                        # Use quartiles for a clean, transparent inner look
-                        if central_marker in ["Median", "Mean", "Mode"]: 
-                            inner_style = "quart" 
-                        else: 
-                            inner_style = None
+                        # Apply log scale to the Y-axis for Violin plots
+                        if log_x: ax.set_yscale('log')
                         
-                        import seaborn as sns
+                        inner_style = "quart" if central_marker in ["Median", "Mean", "Mode"] else None
+                        
                         sns.violinplot(
-                            data=df_violin, 
-                            x='Sample', 
-                            y='Size',
-                            hue='Sample', # FIXED: Forces proper color mapping and builds legend handles
-                            palette=palette_dict, 
-                            inner=inner_style,
-                            linewidth=line_width,
-                            ax=ax
+                            data=df_violin, x='Sample', y='Size', hue='Sample',
+                            palette=palette_dict, inner=inner_style, linewidth=line_width, ax=ax
                         )
                         
-                        # Style the axes for vertical orientation
                         ax.set_xlabel("")
                         ax.tick_params(colors=axes_color, labelsize=label_size)
-                        
-                        # Rotate sample names if they are long so they don't overlap
                         plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
                         
-                        # FIXED: Pass 'show_legend' to the styling function
                         apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=show_legend)
-                        
-                        # Limit the Y-axis to your sidebar slider max
-                        ax.set_ylim(0, max_x_size)
-                        
-                        # Apply custom styling (Tell it NOT to draw the broken legend)
+                        ax.set_ylim(current_limit)
                         apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=False)
                         
-                        # --- FIXED: Manually construct a perfect color-coded legend ---
                         if show_legend:
                             import matplotlib.patches as mpatches
                             leg_size = legend_size if 'legend_size' in locals() else label_size
-                            
-                            # Create a colorful square (patch) for every single sample
                             legend_patches = [mpatches.Patch(facecolor=ent['color'], edgecolor=axes_color, label=ent['label']) for ent in entities]
-                            
-                            # Draw it!
                             leg = ax.legend(handles=legend_patches, loc=legend_position, facecolor=bg_color, edgecolor=axes_color, labelcolor=axes_color, fontsize=leg_size)
                             leg.get_frame().set_linewidth(axes_width)
                         
@@ -594,7 +600,17 @@ else:
                 summary_list = []
                 for ent in entities:
                     d = ent["data"]
-                    summary_list.append({"Sample": ent["label"], "Count": len(d), "Mean (nm)": round(d.mean(), 1), "Median (nm)": round(d.median(), 1), "Mode (nm)": round(get_mode_from_kde(d), 1), "SD (nm)": round(d.std(), 1), "MAD (nm)": round(get_mad(d), 1), "Span": round(get_span(d), 3), "FWHM (nm)": round(get_fwhm_from_kde(d), 1)})
+                    summary_list.append({
+                        "Sample": ent["label"], 
+                        "Count": len(d), 
+                        "Mean (nm)": round(d.mean(), 1), 
+                        "Median (nm)": round(d.median(), 1), 
+                        "Mode (nm)": calculate_stable_mode(d), 
+                        "SD (nm)": round(d.std(), 1), 
+                        "MAD (nm)": round(get_mad(d), 1), 
+                        "Span": round(get_span(d), 3), 
+                        "FWHM (nm)": round(get_fwhm_from_kde(d), 1)
+                    })
                 st.dataframe(pd.DataFrame(summary_list), use_container_width=True)
                 
                 if len(entities) > 1:
@@ -642,7 +658,7 @@ else:
                     if not bubble_mode:
                         scatter_dot_size = st.slider("Scatter Dot Size", min_value=5, max_value=200, value=50, step=5)
                     else:
-                        scatter_dot_size = 50 # Fallback
+                        scatter_dot_size = 50 
                 
             with col4:
                 bins = np.arange(min_x_zeta, max_x_zeta + zeta_bin_width, zeta_bin_width)
@@ -666,7 +682,6 @@ else:
                             if f_col:
                                 z_entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "df": item['df'], "color": item['color'], "style": style})
 
-                # --- FIXED: Mathematical Override for True Full Spectrum ---
                 if z_entities and palette_choice != "Custom (Sample Colors)":
                     palette_name = PALETTES[palette_choice]
                     discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
@@ -674,12 +689,10 @@ else:
                     if palette_name in discrete_palettes:
                         hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(z_entities))).as_hex()
                     else:
-                        # Pull the entire 256-color gradient
                         full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                         if len(z_entities) == 1:
-                            hex_colors = [full_pal[128]] # Center color
+                            hex_colors = [full_pal[128]] 
                         else:
-                            # Force the math to stretch from exactly 0 to exactly 255
                             indices = np.linspace(0, 255, len(z_entities)).astype(int)
                             hex_colors = [full_pal[idx] for idx in indices]
                             
@@ -723,30 +736,31 @@ else:
                         ax_zeta.set_facecolor(bg_color)
                         
                         max_h = 0
-                        kdes = []
+                        poly_data = []
                         for ent in z_entities:
-                            if len(ent['data']) > 1:
-                                y_c = gaussian_kde(ent['data'])(x_vals) * len(ent['data']) * zeta_bin_width
-                                max_h = max(max_h, max(y_c))
-                                kdes.append((y_c, ent))
+                            clean_data = ent['data'].dropna()
+                            if len(clean_data) > 1:
+                                # Apply the same dynamic histogram anchoring for Zeta Ridgelines
+                                counts, edges = np.histogram(clean_data, bins=bins)
+                                centers = edges[:-1] + (zeta_bin_width / 2)
+                                x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                y_line = np.concatenate(([0], counts, [0]))
+                                
+                                max_h = max(max_h, max(y_line))
+                                poly_data.append((x_line, y_line, ent))
                             else:
-                                kdes.append((None, ent))
+                                poly_data.append((None, None, ent))
                                 
                         offset_step = max_h * 0.4 if max_h > 0 else 1
                         y_ticks, y_labels = [], []
                         
-                        for i, (y_c, ent) in enumerate(reversed(kdes)):
+                        for i, (x_line, y_line, ent) in enumerate(reversed(poly_data)):
                             current_offset = i * offset_step
-                            if y_c is not None:
-                                ax_zeta.fill_between(x_vals, current_offset, y_c + current_offset, color=ent['color'], alpha=0.6)
-                                ax_zeta.plot(x_vals, y_c + current_offset, color=ent['color'], lw=line_width)
+                            if y_line is not None:
+                                ax_zeta.fill_between(x_line, current_offset, y_line + current_offset, color=ent['color'], alpha=0.6)
+                                ax_zeta.plot(x_line, y_line + current_offset, color=ent['color'], lw=line_width)
                                 if central_marker != "None":
-                                    val = np.nan
-                                    if central_marker == "Median": val = ent['data'].median()
-                                    elif central_marker == "Mode": val = get_mode_from_kde(ent['data'])
-                                    elif central_marker == "Mean": val = ent['data'].mean()
-                                    if pd.notna(val):
-                                        ax_zeta.vlines(val, current_offset, current_offset + max(y_c), color=ent['color'], linestyle=':', lw=1.5, alpha=0.8)
+                                    plot_central_marker(ax_zeta, ent['data'], ent['color'], central_marker)
                             ax_zeta.axhline(current_offset, color=axes_color, lw=0.5, alpha=0.4)
                             y_ticks.append(current_offset)
                             y_labels.append(ent['label'])
@@ -773,20 +787,27 @@ else:
                     z_col = find_data_column(combined_marg_df, ['zeta potential'])
                     
                     if s_col and z_col:
+                        # 1. Build the Blank JointGrid Base
+                        jg = sns.JointGrid(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict)
+                        
+                        # 2. Draw the Scatter Plot (Joint)
                         if bubble_mode:
-                            # Automatically find remaining numeric columns
                             numeric_cols = combined_marg_df.select_dtypes(include=[np.number]).columns.tolist()
                             valid_bubble_cols = [c for c in numeric_cols if c.lower() not in [s_col.lower(), z_col.lower(), 'channel']]
                             
                             if valid_bubble_cols:
                                 bubble_col = st.selectbox("Select Variable for Bubble Size:", valid_bubble_cols)
-                                jg = sns.jointplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, alpha=0.5, marginal_kws=dict(fill=True), joint_kws={'size': combined_marg_df[bubble_col], 'sizes': (20, 500)})
+                                sns.scatterplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, size=bubble_col, sizes=(20, 500), alpha=0.5, ax=jg.ax_joint)
                             else:
                                 st.warning("No suitable 3rd numeric variable found.")
-                                jg = sns.jointplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, alpha=0.6, marginal_kws=dict(fill=True), joint_kws={'s': scatter_dot_size})
+                                sns.scatterplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, s=scatter_dot_size, alpha=0.6, ax=jg.ax_joint)
                         else:
-                            jg = sns.jointplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, alpha=0.6, marginal_kws=dict(fill=True), joint_kws={'s': scatter_dot_size})
+                            sns.scatterplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, s=scatter_dot_size, alpha=0.6, ax=jg.ax_joint)
                             
+                        # 3. Draw the Marginal Polygons (Forces anchored histograms instead of KDE!)
+                        sns.histplot(data=combined_marg_df, x=s_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_x, legend=False, linewidth=line_width)
+                        sns.histplot(data=combined_marg_df, y=z_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_y, legend=False, linewidth=line_width)
+                        
                         jg.fig.patch.set_facecolor(bg_color)
                         jg.ax_joint.set_facecolor(bg_color)
                         jg.ax_marg_x.set_facecolor(bg_color)
@@ -795,20 +816,29 @@ else:
                         jg.ax_joint.set_xlabel("Hydrodynamic Diameter (nm)", color=axes_color, fontsize=label_size)
                         jg.ax_joint.set_ylabel("Zeta Potential (mV)", color=axes_color, fontsize=label_size)
                         jg.ax_joint.tick_params(colors=axes_color, labelsize=label_size, width=axes_width)
+                        
                         for spine in jg.ax_joint.spines.values(): 
                             spine.set_color(axes_color)
                             spine.set_linewidth(axes_width)
                             
-                        # Apply thickness and colors to the marginal histogram axes
                         for ax_marg in [jg.ax_marg_x, jg.ax_marg_y]:
                             ax_marg.tick_params(colors=axes_color, width=axes_width)
                             for spine in ax_marg.spines.values():
                                 spine.set_color(axes_color)
                                 spine.set_linewidth(axes_width)
+                                
                         if show_grid: jg.ax_joint.grid(True, linestyle='--', linewidth=0.5, alpha=0.3, color=axes_color)
                         
+                        # --- 4. FIXED LEGEND POSITIONING ---
                         if show_legend and jg.ax_joint.get_legend():
-                            leg = jg.ax_joint.get_legend()
+                            # Extract the raw legend data
+                            handles, labels = jg.ax_joint.get_legend_handles_labels()
+                            existing_leg = jg.ax_joint.get_legend()
+                            leg_title = existing_leg.get_title().get_text() if existing_leg.get_title() else "Sample"
+                            
+                            # Rebuild the legend exactly where the user asked for it
+                            leg = jg.ax_joint.legend(handles=handles, labels=labels, loc=legend_position, fontsize=legend_size, title=leg_title)
+                            
                             for text in leg.get_texts(): 
                                 text.set_color(axes_color)
                                 text.set_fontsize(legend_size)
@@ -817,6 +847,7 @@ else:
                                 leg.get_title().set_fontsize(legend_size)
                             leg.get_frame().set_facecolor(bg_color)
                             leg.get_frame().set_edgecolor(axes_color)
+                            leg.get_frame().set_linewidth(axes_width)
                             
                         elif not show_legend and jg.ax_joint.get_legend():
                             jg.ax_joint.get_legend().remove()
@@ -829,7 +860,8 @@ else:
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Zeta Potential)")
             if z_entities:
-                summary_list = [{"Sample": ent["label"], "Count": len(ent["data"]), "Mean (mV)": round(ent["data"].mean(), 1), "SD (mV)": round(ent["data"].std(), 1)} for ent in z_entities]
+                # FIXED: Added the stable calculate_stable_mode to the statistics dataframe!
+                summary_list = [{"Sample": ent["label"], "Count": len(ent["data"]), "Mean (mV)": round(ent["data"].mean(), 1), "Mode (mV)": calculate_stable_mode(ent["data"]), "SD (mV)": round(ent["data"].std(), 1)} for ent in z_entities]
                 st.dataframe(pd.DataFrame(summary_list), use_container_width=True)
                 
                 if len(z_entities) > 1:
@@ -893,7 +925,7 @@ else:
                     x_col = 'Channel' if grouping == "Channel (Compare Samples)" else 'Sample Label'
                     hue_col = 'Sample Label' if grouping == "Channel (Compare Samples)" else 'Channel'
                     
-                    # --- FIXED: Mathematical Override for True Full Spectrum (Tab 3) ---
+                    # --- Mathematical Override for True Full Spectrum (Tab 3) ---
                     if palette_choice == "Custom (Sample Colors)":
                         active_palette = palette_dict
                     else:
@@ -921,6 +953,10 @@ else:
                     elif graph_type == "Box Plot": sns.boxplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, ax=ax_conc, fliersize=5, linewidth=line_width, width=bar_width)
                     
                     apply_custom_style(ax_conc, "Total Particle Concentration", x_col, "Concentration (particles/mL)", None, bg_color, axes_color, show_grid, draw_legend=show_legend)
+                    
+                    # --- FIXED: Rotate X-axis labels to prevent overlapping ---
+                    if grouping == "Sample (Compare Channels)":
+                        plt.setp(ax_conc.get_xticklabels(), rotation=45, ha="right")
                     
                     # Ensure the legend title (Channel vs Sample) matches the styling
                     if show_legend and ax_conc.get_legend():
@@ -995,8 +1031,9 @@ else:
                         df_clean['Population'] = models[best_n - 1].predict(X_log) + 1
                         total_particles = len(df_clean)
                         
+                        # --- FIXED: Use the stable mode function for sub-populations ---
                         summary = df_clean.groupby('Population')[feature_col].agg(
-                            Mean='mean', Median=np.median, Mode=get_mode_from_kde, 
+                            Mean='mean', Median=np.median, Mode=calculate_stable_mode, 
                             SD='std', MAD=get_mad, Count='count', Span=get_span, FWHM=get_fwhm_from_kde
                         )
                         summary['Percentage (%)'] = (summary['Count'] / total_particles) * 100
@@ -1092,8 +1129,11 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # --- FIXED: Stop Numeric Color Math & Restore Full Range ---
-                            # Force Population to be a String so Seaborn treats it strictly as discrete categories
+                            # --- FIXED: Auto-scale the BIC Y-axis to defeat bottom=0 ---
+                            min_bic, max_bic = min(res['bic']), max(res['bic'])
+                            margin = (max_bic - min_bic) * 0.05 if max_bic != min_bic else max_bic * 0.05
+                            ax1.set_ylim(min_bic - margin, max_bic + margin)
+                            
                             res['df']['Pop_Label'] = res['df']['Population'].astype(str)
                             pops = np.sort(res['df']['Pop_Label'].unique())
                             
@@ -1104,7 +1144,6 @@ else:
                                 exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
                                 pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                             else:
-                                # Restore 0 to 255 so the extreme colors survive the 20% alpha transparency!
                                 full_pal = sns.color_palette(palette_name, n_colors=256)
                                 if len(pops) == 1:
                                     pop_color_dict = {pops[0]: full_pal[128]}
@@ -1112,10 +1151,25 @@ else:
                                     indices = np.linspace(0, 255, len(pops)).astype(int)
                                     pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                             
-                            # Update hue to 'Pop_Label'
-                            sns.histplot(data=res['df'], x=res['feature_col'], hue='Pop_Label', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, binrange=(0, gmm_x_max), kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
-                            
-                            # Add Vertical Markers to Single Channel
+                            # --- FIXED: Custom Polygon Generation for Sub-Populations ---
+                            for pop in pops:
+                                p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
+                                if len(p_data) == 0: continue
+                                c = pop_color_dict[pop]
+                                
+                                counts, edges = np.histogram(p_data, bins=bins_ext)
+                                centers = edges[:-1] + (gmm_bin_width / 2)
+                                x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                y_line = np.concatenate(([0], counts, [0]))
+                                
+                                pop_lbl = f"Pop {pop}"
+                                if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
+                                    ax2.hist(p_data, bins=bins_ext, color=c, alpha=0.3, edgecolor=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
+                                    ax2.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
+                                    if display_style == "Smooth Curve Only":
+                                        ax2.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
+
                             if central_marker != "None":
                                 for pop in pops:
                                     p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
@@ -1123,9 +1177,9 @@ else:
                                         val = None
                                         if central_marker == "Mean": val = p_data.mean()
                                         elif central_marker == "Median": val = p_data.median()
-                                        elif central_marker == "Mode": val = get_mode_from_kde(p_data)
+                                        elif central_marker == "Mode": val = calculate_stable_mode(p_data)
                                         
-                                        if val is not None and not pd.isna(val):
+                                        if val is not None and pd.notna(val):
                                             ax2.axvline(val, color=pop_color_dict[pop], linestyle='--', linewidth=line_width, zorder=5)
                             
                             apply_custom_style(ax2, f"{ch} Particles Grouped into {res['best_n']} Populations", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
@@ -1147,12 +1201,18 @@ else:
                             
                             ax1.set_xticks(range(1, max_pops + 1)) 
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=show_legend)
+                            
+                            # --- FIXED: Auto-scale the BIC Y-axis to defeat bottom=0 ---
+                            all_bics = [b for r in gmm_results.values() for b in r['bic']]
+                            min_bic, max_bic = min(all_bics), max(all_bics)
+                            margin = (max_bic - min_bic) * 0.05 if max_bic != min_bic else max_bic * 0.05
+                            ax1.set_ylim(min_bic - margin, max_bic + margin)
+                            
                             apply_custom_style(ax2, "Multi-Channel Size Distribution Overlay", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
                             
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
                                 
-                                # --- FIXED: Stop Numeric Color Math & Restore Full Range ---
                                 res['df']['Pop_Label'] = res['df']['Population'].astype(str)
                                 pops = np.sort(res['df']['Pop_Label'].unique())
                                 
@@ -1163,7 +1223,6 @@ else:
                                     exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
                                     pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                                 else:
-                                    # Restore 0 to 255 so the extreme colors survive the 20% alpha transparency!
                                     full_pal = sns.color_palette(palette_name, n_colors=256)
                                     if len(pops) == 1:
                                         pop_color_dict = {pops[0]: full_pal[128]}
@@ -1171,40 +1230,25 @@ else:
                                         indices = np.linspace(0, 255, len(pops)).astype(int)
                                         pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                                 
-                                # 1. The Updated Plot Generator (using Pop_Label)
-                                sns.histplot(
-                                    data=res['df'], 
-                                    x=res['feature_col'], 
-                                    hue='Pop_Label', 
-                                    palette=pop_color_dict, 
-                                    element='step', 
-                                    binwidth=gmm_bin_width, 
-                                    binrange=(0, gmm_x_max), 
-                                    kde=(display_style != "Histogram Only"), 
-                                    fill=(display_style != "Smooth Curve Only"), 
-                                    alpha=(0.2 if display_style != "Smooth Curve Only" else 0.0), 
-                                    line_kws={'linewidth': line_width}, 
-                                    linewidth=(line_width if display_style != "Smooth Curve Only" else 0), 
-                                    ax=ax_sub
-                                )
-                    
-                                # 2. Rebuild the legend for "Smooth Curve Only" so it isn't invisible
-                                if display_style == "Smooth Curve Only":
-                                    import matplotlib.lines as mlines
-                                    legend = ax_sub.get_legend()
-                                    if legend is not None:
-                                        handles, labels = [], []
-                                        for text_obj in legend.get_texts():
-                                            pop_name = text_obj.get_text().strip()
-                                            labels.append(pop_name)
-                                            # Using string keys matches perfectly now
-                                            color = pop_color_dict.get(pop_name, axes_color)
-                                            handles.append(mlines.Line2D([], [], color=color, linewidth=line_width))
+                                # --- FIXED: Custom Polygon Generation for Sub-Populations ---
+                                for pop in pops:
+                                    p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
+                                    if len(p_data) == 0: continue
+                                    c = pop_color_dict[pop]
+                                    
+                                    counts, edges = np.histogram(p_data, bins=bins_ext)
+                                    centers = edges[:-1] + (gmm_bin_width / 2)
+                                    x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                    y_line = np.concatenate(([0], counts, [0]))
+                                    
+                                    pop_lbl = f"Pop {pop}"
+                                    if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
+                                        ax_sub.hist(p_data, bins=bins_ext, color=c, alpha=0.3, edgecolor=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                    if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
+                                        ax_sub.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
+                                        if display_style == "Smooth Curve Only":
+                                            ax_sub.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
                                 
-                                        # Overwrite the invisible legend with our new solid colored lines
-                                        ax_sub.legend(handles=handles, labels=labels, title=legend.get_title().get_text())
-                                
-                                # Add Vertical Markers to Multi-Channel
                                 if central_marker != "None":
                                     for pop in pops:
                                         p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
@@ -1212,9 +1256,9 @@ else:
                                             val = None
                                             if central_marker == "Mean": val = p_data.mean()
                                             elif central_marker == "Median": val = p_data.median()
-                                            elif central_marker == "Mode": val = get_mode_from_kde(p_data)
+                                            elif central_marker == "Mode": val = calculate_stable_mode(p_data)
                                             
-                                            if val is not None and not pd.isna(val):
+                                            if val is not None and pd.notna(val):
                                                 ax_sub.axvline(val, color=pop_color_dict[pop], linestyle='--', linewidth=line_width, zorder=5)
                                                 
                                 apply_custom_style(ax_sub, f"Sub-population Breakdown: {ch} ({res['best_n']} Populations Found)", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
@@ -1242,7 +1286,7 @@ else:
             st.warning("No 'Colocalization' measurement files detected.")
         else:
             st.info("""💡 **Note:** Pie charts display the percentage of unique particles colocalized versus particles detected strictly in a single channel.
-            Your percentages may differ slightly from ZetaSphere's pdf report. This is expected! This app process displays the percentages of all your raw data, while ZetaSphere applies a diffussion correction multiplier to compensate for small particles drifting out of the camera's field of view. This app prioritizes 100% mathematical transparency by plotting exactly what is in your data file.""")
+            Your percentages may differ slightly from ZetaSphere's pdf report. This is expected! This app displays the percentages of all your raw data, while ZetaSphere applies a diffussion correction multiplier to compensate for small particles drifting out of the camera's field of view.""")
             
             active_coloc_items = []
             for ch, items in processed_data['Colocalization'].items():
@@ -1426,7 +1470,13 @@ else:
     # ==========================================
     with tab6:
         st.header("Colocalization Quality & Morphology")
-        use_palette_t6 = st.checkbox("🎨 Override default colors with sidebar palette", key="tab6_color_override")
+        
+        col_t6_1, col_t6_2 = st.columns([1, 2])
+        with col_t6_1:
+            use_palette_t6 = st.checkbox("🎨 Override default colors with sidebar palette", key="tab6_color_override")
+        with col_t6_2:
+            # --- FIXED: Added the missing slider to control the polygon bins! ---
+            coloc_bin_width = st.slider("Size Shift Bin Width (nm)", min_value=1, max_value=50, value=25, key="t6_bin")
         
         if not processed_data.get('Colocalization'):
             st.warning("No 'Colocalization' measurement files detected.")
@@ -1439,7 +1489,6 @@ else:
                 for idx, item in enumerate(active_coloc_items):
                     df = item['df'].copy()
                     
-                    # Find our necessary columns (Removed area_col requirement)
                     ch_col = find_data_column(df, ['channel'])
                     coloc_col = find_data_column(df, ['colocalised', 'colocalized'])
                     pos_col = find_data_column(df, ['position'])
@@ -1455,7 +1504,6 @@ else:
                         
                     st.subheader(f"Data for: {item['label']}")
                     
-                    # 1. Filter for ONLY colocalized particles
                     coloc_df = df[df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0'])]
                     
                     unique_chs = df[ch_col].dropna().unique()
@@ -1464,7 +1512,6 @@ else:
                     
                     matched_pairs = []
                     
-                    # 2. Iterate by position to find matches
                     for pos in coloc_df[pos_col].unique():
                         pos_data = coloc_df[coloc_df[pos_col] == pos]
                         c1_data = pos_data[pos_data[ch_col] == ch1_val]
@@ -1472,15 +1519,11 @@ else:
                         
                         if c1_data.empty or c2_data.empty: continue
                         
-                        # 3. Euclidean Distance Matrix using NumPy
                         x1, y1 = c1_data[x_col].values, c1_data[y_col].values
                         x2, y2 = c2_data[x_col].values, c2_data[y_col].values
                         
                         dist_matrix = np.sqrt((x1[:, np.newaxis] - x2)**2 + (y1[:, np.newaxis] - y2)**2)
                         
-                        # 4. Reconstruct Pairs (Trusting the machine's 'True' flag)
-                        # We find the closest pair, but we REMOVE the strict link_radius cutoff 
-                        # because ZetaSphere already verified these are colocalized.
                         for i in range(dist_matrix.shape[0]):
                             min_idx = np.argmin(dist_matrix[i])
                             
@@ -1497,22 +1540,18 @@ else:
                         st.warning("No colocalized pairs could be matched within the given Link Radius.")
                         continue
                         
-                    # Create the 2-panel plotting grid
                     w = (fig_width * 2) if 'fig_width' in locals() else 12
                     h = fig_height if 'fig_height' in locals() else 5
                     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(w, h))
                     fig.patch.set_facecolor(bg_color)
                     
-                    # Safely handle legend size if it exists in your sidebar
                     leg_size = legend_size if 'legend_size' in locals() else label_size
                     
-                    # Plot 1: Intensity Stoichiometry (Scatter)
                     sns.regplot(data=matched_df, x='C1_Intensity', y='C2_Intensity', ax=ax1, scatter_kws={'alpha': 0.5}, color='#FFD700', line_kws={'linewidth': line_width})
                     ax1.set_title("Dye Stoichiometry", color=axes_color, fontweight='bold', fontsize=title_size)
                     ax1.set_xlabel("Channel 1 Mean Intensity", color=axes_color, fontsize=label_size)
                     ax1.set_ylabel("Channel 2 Mean Intensity", color=axes_color, fontsize=label_size)
                     
-                    # --- DYNAMIC CHANNEL NAMES & COLORS ---
                     name_lower = item['filename'].lower()
                     found = []
                     for code, (c_name, color) in DEFAULT_CHANNELS.items():
@@ -1523,9 +1562,7 @@ else:
                     ch1_name = found[0][1] if len(found) >= 1 else "Channel 1"
                     ch2_name = found[1][1] if len(found) >= 2 else "Channel 2"
                     
-                    # --- FIXED: Mathematical Override for True Full Spectrum (Tab 6) ---
                     if use_palette_t6:
-                        # Fallback to viridis if they accidentally leave it on Custom Sample Colors
                         palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
                         discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
                         
@@ -1546,7 +1583,6 @@ else:
                         
                     palette_colors = [ch1_color, ch2_color, coloc_color]
 
-                    # Data Prep for Size
                     single_c1 = df[(df[ch_col] == ch1_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
                     single_c2 = df[(df[ch_col] == ch2_val) & (~df[coloc_col].astype(str).str.strip().str.upper().isin(['TRUE', '1', '1.0']))]
                     
@@ -1555,16 +1591,40 @@ else:
                         'Size': pd.concat([single_c1[size_col], single_c2[size_col], matched_df['Colocalized_Size']], ignore_index=True)
                     })
                     
-                    # Plot 2: Hydrodynamic Size Shift (Polygon Histogram)
-                    # Bins the exact data and connects them, eliminating impossible Gaussian tails
-                    sns.histplot(
-                        data=morph_df, x='Size', hue='Group', ax=ax2, 
-                        element="poly", fill=True, stat="density", 
-                        palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend,
-                        binwidth=10  # <--- Forces the curve to lock exactly to your 10nm bins
-                    )
+                    # --- FIXED: Custom Density Polygon Plotting (Replaces KDE) ---
+                    max_size = morph_df['Size'].max() if pd.notna(morph_df['Size'].max()) else 1000
+                    bins_t6 = np.arange(0, max_size + coloc_bin_width, coloc_bin_width)
+                    
+                    for i, grp in enumerate([f'Only {ch1_name}', f'Only {ch2_name}', 'Colocalized']):
+                        grp_data = morph_df[morph_df['Group'] == grp]['Size'].dropna()
+                        if len(grp_data) == 0: continue
+                        
+                        c = palette_colors[i]
+                        counts, edges = np.histogram(grp_data, bins=bins_t6)
+                        
+                        # Normalize to density so the small Colocalized peak is visible against the massive Single peaks!
+                        area = counts.sum() * coloc_bin_width
+                        density = counts / area if area > 0 else counts
+                        
+                        centers = edges[:-1] + (coloc_bin_width / 2)
+                        x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                        y_line = np.concatenate(([0], density, [0]))
+                        
+                        if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
+                            ax2.hist(grp_data, bins=bins_t6, color=c, alpha=0.3, edgecolor=c, linewidth=line_width, density=True, label=f"{grp} (Bars)" if display_style == "Histogram Only" else None)
+                        if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
+                            ax2.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=grp)
+                            if display_style == "Smooth Curve Only":
+                                ax2.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
+                        # Automatically draw the stable Mode line for QC visualization
+                        plot_central_marker(ax2, grp_data, c, "Mode")
+
+                    ax2.set_title("Hydrodynamic Size Shift", color=axes_color, fontweight='bold', fontsize=title_size)
+                    ax2.set_xlabel("Hydrodynamic Diameter (nm)", color=axes_color, fontsize=label_size)
+                    ax2.set_ylabel("Density", color=axes_color, fontsize=label_size)
+                    ax2.set_xlim(left=0)
+                    ax2.set_ylim(bottom=0)
                                         
-                    # Polish axes and typography
                     for ax in [ax1, ax2]:
                         ax.tick_params(colors=axes_color, labelsize=label_size, width=axes_width)
                         for spine in ax.spines.values(): 
@@ -1572,12 +1632,12 @@ else:
                             spine.set_linewidth(axes_width)
                         ax.set_facecolor(bg_color)
                         
-                    # Style the legend for the KDE plot (tied to the sidebar toggle)
                     if show_legend:
-                        legend = ax2.get_legend()
+                        legend = ax2.legend(loc=legend_position, fontsize=leg_size)
                         if legend is not None:
                             plt.setp(legend.get_texts(), color=axes_color, fontsize=leg_size)
-                            plt.setp(legend.get_title(), color=axes_color, fontsize=leg_size, fontweight='bold')
+                            if legend.get_title():
+                                plt.setp(legend.get_title(), color=axes_color, fontsize=leg_size, fontweight='bold')
                             legend.get_frame().set_facecolor(bg_color)
                             legend.get_frame().set_edgecolor(axes_color)
                             legend.get_frame().set_linewidth(axes_width)
@@ -1585,7 +1645,6 @@ else:
                     plt.tight_layout()
                     st.pyplot(fig)
                     
-                    # Image Download Buttons
                     safe_filename = f"Coloc_Quality_{item['label'].replace(' ', '_')}"
                     create_download_buttons(fig, safe_filename)
                     plt.close(fig)
@@ -1608,18 +1667,15 @@ else:
                     stat_cols[2].metric("Correlation Quality", score)
                     st.info(f"**Interpretation:** {exp}")
 
-                    # --- Size Statistics ---
+                    # --- FIXED: Upgraded Size Statistics to Stable Mode ---
                     st.markdown("### 🔬 Hydrodynamic Size Summary")
 
-                    med_size_c1 = morph_df[morph_df['Group'] == f'Only {ch1_name}']['Size'].median()
-                    med_size_c2 = morph_df[morph_df['Group'] == f'Only {ch2_name}']['Size'].median()
-                    med_size_coloc = morph_df[morph_df['Group'] == 'Colocalized']['Size'].median()
+                    mode_size_c1 = calculate_stable_mode(morph_df[morph_df['Group'] == f'Only {ch1_name}']['Size'])
+                    mode_size_c2 = calculate_stable_mode(morph_df[morph_df['Group'] == f'Only {ch2_name}']['Size'])
+                    mode_size_coloc = calculate_stable_mode(morph_df[morph_df['Group'] == 'Colocalized']['Size'])
                     
-                    med_size_c1 = med_size_c1 if pd.notna(med_size_c1) else 0
-                    med_size_c2 = med_size_c2 if pd.notna(med_size_c2) else 0
-                    
-                    avg_single_size = (med_size_c1 + med_size_c2) / 2
-                    size_ratio = med_size_coloc / avg_single_size if avg_single_size > 0 else 1
+                    avg_single_size = (mode_size_c1 + mode_size_c2) / 2
+                    size_ratio = mode_size_coloc / avg_single_size if avg_single_size > 0 else 1
                     
                     if size_ratio >= 1.2:
                         size_score, size_exp = "🔴 Shift Detected", "Colocalized particles have a notably larger hydrodynamic diameter. The dual-labeling may be inducing aggregation, or the dyes are selectively binding to larger particles in the overall population."
@@ -1627,9 +1683,9 @@ else:
                         size_score, size_exp = "🟢 Consistent Size", "Dual-labeled particles share a nearly identical hydrodynamic size with single-labeled particles, confirming that dual-labeling does not severely alter their physical profile."
 
                     size_cols = st.columns(4)
-                    size_cols[0].metric(f"{ch1_name} Median Size", f"{round(med_size_c1, 1)} nm")
-                    size_cols[1].metric(f"{ch2_name} Median Size", f"{round(med_size_c2, 1)} nm")
-                    size_cols[2].metric("Coloc. Median Size", f"{round(med_size_coloc, 1)} nm")
+                    size_cols[0].metric(f"{ch1_name} Mode Size", f"{round(mode_size_c1, 1)} nm")
+                    size_cols[1].metric(f"{ch2_name} Mode Size", f"{round(mode_size_c2, 1)} nm")
+                    size_cols[2].metric("Coloc. Mode Size", f"{round(mode_size_coloc, 1)} nm")
                     size_cols[3].metric("Size Status", size_score)
                     st.info(f"**Interpretation:** {size_exp}")
                     
@@ -1637,11 +1693,11 @@ else:
                     qc_data = {
                         "Metric": [
                             "Pearson Correlation (r)", "R-squared (R²)", "Correlation Quality", "Correlation Interpretation",
-                            f"{ch1_name} Median Size (nm)", f"{ch2_name} Median Size (nm)", "Colocalized Median Size (nm)", "Size Status", "Size Interpretation"
+                            f"{ch1_name} Mode Size (nm)", f"{ch2_name} Mode Size (nm)", "Colocalized Mode Size (nm)", "Size Status", "Size Interpretation"
                         ],
                         "Value": [
                             round(r_val, 3), round(r_sq, 3), score, exp,
-                            round(med_size_c1, 1), round(med_size_c2, 1), round(med_size_coloc, 1), size_score, size_exp
+                            round(mode_size_c1, 1), round(mode_size_c2, 1), round(mode_size_coloc, 1), size_score, size_exp
                         ]
                     }
                     
