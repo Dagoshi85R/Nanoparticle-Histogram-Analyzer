@@ -533,10 +533,16 @@ else:
                         for ent in entities:
                             clean_data = ent['data'].dropna()
                             if len(clean_data) > 1:
-                                counts, edges = np.histogram(clean_data, bins=bins)
-                                centers = edges[:-1] + (size_bin_width / 2)
-                                x_line = np.concatenate(([0], centers, [edges[-1] + (size_bin_width / 2)]))
-                                y_line = np.concatenate(([0], counts, [0]))
+                                if globals().get('use_kde', False):
+                                    # 1. Smooth KDE Math
+                                    y_line = gaussian_kde(clean_data)(x_vals) * len(clean_data) * size_bin_width
+                                    x_line = x_vals
+                                else:
+                                    # 2. Strict Polygon Math
+                                    counts, edges = np.histogram(clean_data, bins=bins)
+                                    centers = edges[:-1] + (size_bin_width / 2)
+                                    x_line = np.concatenate(([0], centers, [edges[-1] + (size_bin_width / 2)]))
+                                    y_line = np.concatenate(([0], counts, [0]))
                                 
                                 max_h = max(max_h, max(y_line))
                                 poly_data.append((x_line, y_line, ent))
@@ -750,11 +756,16 @@ else:
                         for ent in z_entities:
                             clean_data = ent['data'].dropna()
                             if len(clean_data) > 1:
-                                # Apply the same dynamic histogram anchoring for Zeta Ridgelines
-                                counts, edges = np.histogram(clean_data, bins=bins)
-                                centers = edges[:-1] + (zeta_bin_width / 2)
-                                x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
-                                y_line = np.concatenate(([0], counts, [0]))
+                                if globals().get('use_kde', False):
+                                    # 1. Smooth KDE Math
+                                    y_line = gaussian_kde(clean_data)(x_vals) * len(clean_data) * zeta_bin_width
+                                    x_line = x_vals
+                                else:
+                                    # 2. Strict Polygon Math
+                                    counts, edges = np.histogram(clean_data, bins=bins)
+                                    centers = edges[:-1] + (zeta_bin_width / 2)
+                                    x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                    y_line = np.concatenate(([0], counts, [0]))
                                 
                                 max_h = max(max_h, max(y_line))
                                 poly_data.append((x_line, y_line, ent))
@@ -814,9 +825,13 @@ else:
                         else:
                             sns.scatterplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, s=scatter_dot_size, alpha=0.6, ax=jg.ax_joint)
                             
-                        # 3. Draw the Marginal Polygons (Forces anchored histograms instead of KDE!)
-                        sns.histplot(data=combined_marg_df, x=s_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_x, legend=False, linewidth=line_width)
-                        sns.histplot(data=combined_marg_df, y=z_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_y, legend=False, linewidth=line_width)
+                        # 3. Draw the Marginals (Dynamically switch between KDE and Polygons!)
+                        if globals().get('use_kde', False):
+                            sns.kdeplot(data=combined_marg_df, x=s_col, hue='Sample', palette=palette_dict, fill=True, alpha=0.3, ax=jg.ax_marg_x, legend=False, linewidth=line_width)
+                            sns.kdeplot(data=combined_marg_df, y=z_col, hue='Sample', palette=palette_dict, fill=True, alpha=0.3, ax=jg.ax_marg_y, legend=False, linewidth=line_width)
+                        else:
+                            sns.histplot(data=combined_marg_df, x=s_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_x, legend=False, linewidth=line_width)
+                            sns.histplot(data=combined_marg_df, y=z_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_y, legend=False, linewidth=line_width)
                         
                         jg.fig.patch.set_facecolor(bg_color)
                         jg.ax_joint.set_facecolor(bg_color)
