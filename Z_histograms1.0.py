@@ -90,6 +90,9 @@ with st.sidebar:
         facet_share_y = False
         
     display_style = st.radio("Plot Style", ["Both (Bar + Curve)", "Smooth Curve Only", "Histogram Only"])
+    # --- NEW: KDE Toggle ---
+    use_kde = st.checkbox("Use Smooth KDE Curves", value=False, help="Enable traditional, smoothed Kernel Density curves instead of strict bin-anchored polygons.")
+    
     central_marker = st.radio("Draw Vertical Marker", ["None", "Mean", "Median", "Mode"])
     
     col_c1, col_c2 = st.columns(2)
@@ -306,32 +309,36 @@ def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, col
     x_data = data[feature_col].dropna()
     if len(x_data) == 0: return
     
-    # Mathematically bin the data exactly like ZetaSphere
     counts, edges = np.histogram(x_data, bins=bins)
-    
-    # Calculate the exact center of each bin for the line points
-    centers = edges[:-1] + (bin_width / 2)
-    
-    # Dynamically anchor to the start/end of the bins so it works for negative Zeta values!
-    centers_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
-    counts_line = np.concatenate(([0], counts, [0]))
     
     hist_lbl = label if display_style == "Histogram Only" else None
     curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
-    # --- FIXED: Draw clean exterior lines without vertical dividers ---
+    # Draw Bars 
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-        # 1. Draw the solid exterior outline
         ax.hist(x_data, bins=bins, histtype='step', color=color, linewidth=line_width, linestyle=style, label=hist_lbl)
-        # 2. Draw the soft fill inside
         ax.hist(x_data, bins=bins, histtype='stepfilled', color=color, alpha=0.2, linewidth=0)
         
-    # Draw Anchored Polygon Line
+    # Draw Lines
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-        ax.plot(centers_line, counts_line, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
-        # Optional: Adds a very faint fill under the curve for better visibility
-        if display_style == "Smooth Curve Only":
-            ax.fill_between(centers_line, 0, counts_line, color=color, alpha=0.1)
+        
+        # --- NEW: Dynamic Toggle between KDE and Polygons ---
+        if globals().get('use_kde', False) and len(x_data) > 1:
+            # 1. Smooth KDE Math
+            kde = gaussian_kde(x_data)
+            y_smooth = kde(x_vals) * len(x_data) * bin_width
+            ax.plot(x_vals, y_smooth, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+            if display_style == "Smooth Curve Only":
+                ax.fill_between(x_vals, 0, y_smooth, color=color, alpha=0.1)
+        else:
+            # 2. Strict ZetaSphere Polygon Math
+            centers = edges[:-1] + (bin_width / 2)
+            centers_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+            counts_line = np.concatenate(([0], counts, [0]))
+            
+            ax.plot(centers_line, counts_line, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+            if display_style == "Smooth Curve Only":
+                ax.fill_between(centers_line, 0, counts_line, color=color, alpha=0.1)
 
 def plot_central_marker(ax, data, color, marker_type):
     val = np.nan
