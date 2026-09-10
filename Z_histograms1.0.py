@@ -1048,8 +1048,9 @@ else:
                         df_clean['Population'] = models[best_n - 1].predict(X_log) + 1
                         total_particles = len(df_clean)
                         
+                        # --- FIXED: Use the stable mode function for sub-populations ---
                         summary = df_clean.groupby('Population')[feature_col].agg(
-                            Mean='mean', Median=np.median, Mode=get_mode_from_kde, 
+                            Mean='mean', Median=np.median, Mode=calculate_stable_mode, 
                             SD='std', MAD=get_mad, Count='count', Span=get_span, FWHM=get_fwhm_from_kde
                         )
                         summary['Percentage (%)'] = (summary['Count'] / total_particles) * 100
@@ -1145,8 +1146,11 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # --- FIXED: Stop Numeric Color Math & Restore Full Range ---
-                            # Force Population to be a String so Seaborn treats it strictly as discrete categories
+                            # --- FIXED: Auto-scale the BIC Y-axis to defeat bottom=0 ---
+                            min_bic, max_bic = min(res['bic']), max(res['bic'])
+                            margin = (max_bic - min_bic) * 0.05 if max_bic != min_bic else max_bic * 0.05
+                            ax1.set_ylim(min_bic - margin, max_bic + margin)
+                            
                             res['df']['Pop_Label'] = res['df']['Population'].astype(str)
                             pops = np.sort(res['df']['Pop_Label'].unique())
                             
@@ -1157,7 +1161,6 @@ else:
                                 exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
                                 pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                             else:
-                                # Restore 0 to 255 so the extreme colors survive the 20% alpha transparency!
                                 full_pal = sns.color_palette(palette_name, n_colors=256)
                                 if len(pops) == 1:
                                     pop_color_dict = {pops[0]: full_pal[128]}
@@ -1165,10 +1168,25 @@ else:
                                     indices = np.linspace(0, 255, len(pops)).astype(int)
                                     pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                             
-                            # Update hue to 'Pop_Label'
-                            sns.histplot(data=res['df'], x=res['feature_col'], hue='Pop_Label', palette=pop_color_dict, element='step' if display_style != "Smooth Curve Only" else None, binwidth=gmm_bin_width, binrange=(0, gmm_x_max), kde=True, fill=display_style != "Smooth Curve Only", alpha=0.2 if display_style != "Smooth Curve Only" else 0, line_kws={'linewidth': line_width}, linewidth=line_width, ax=ax2)
-                            
-                            # Add Vertical Markers to Single Channel
+                            # --- FIXED: Custom Polygon Generation for Sub-Populations ---
+                            for pop in pops:
+                                p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
+                                if len(p_data) == 0: continue
+                                c = pop_color_dict[pop]
+                                
+                                counts, edges = np.histogram(p_data, bins=bins_ext)
+                                centers = edges[:-1] + (gmm_bin_width / 2)
+                                x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                y_line = np.concatenate(([0], counts, [0]))
+                                
+                                pop_lbl = f"Pop {pop}"
+                                if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
+                                    ax2.hist(p_data, bins=bins_ext, color=c, alpha=0.3, edgecolor=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
+                                    ax2.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
+                                    if display_style == "Smooth Curve Only":
+                                        ax2.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
+
                             if central_marker != "None":
                                 for pop in pops:
                                     p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
@@ -1176,9 +1194,9 @@ else:
                                         val = None
                                         if central_marker == "Mean": val = p_data.mean()
                                         elif central_marker == "Median": val = p_data.median()
-                                        elif central_marker == "Mode": val = get_mode_from_kde(p_data)
+                                        elif central_marker == "Mode": val = calculate_stable_mode(p_data)
                                         
-                                        if val is not None and not pd.isna(val):
+                                        if val is not None and pd.notna(val):
                                             ax2.axvline(val, color=pop_color_dict[pop], linestyle='--', linewidth=line_width, zorder=5)
                             
                             apply_custom_style(ax2, f"{ch} Particles Grouped into {res['best_n']} Populations", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
@@ -1200,12 +1218,18 @@ else:
                             
                             ax1.set_xticks(range(1, max_pops + 1)) 
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=show_legend)
+                            
+                            # --- FIXED: Auto-scale the BIC Y-axis to defeat bottom=0 ---
+                            all_bics = [b for r in gmm_results.values() for b in r['bic']]
+                            min_bic, max_bic = min(all_bics), max(all_bics)
+                            margin = (max_bic - min_bic) * 0.05 if max_bic != min_bic else max_bic * 0.05
+                            ax1.set_ylim(min_bic - margin, max_bic + margin)
+                            
                             apply_custom_style(ax2, "Multi-Channel Size Distribution Overlay", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
                             
                             for i, (ch, res) in enumerate(gmm_results.items()):
                                 ax_sub = fig_gmm.add_subplot(gs[i + 1, :])
                                 
-                                # --- FIXED: Stop Numeric Color Math & Restore Full Range ---
                                 res['df']['Pop_Label'] = res['df']['Population'].astype(str)
                                 pops = np.sort(res['df']['Pop_Label'].unique())
                                 
@@ -1216,7 +1240,6 @@ else:
                                     exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
                                     pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                                 else:
-                                    # Restore 0 to 255 so the extreme colors survive the 20% alpha transparency!
                                     full_pal = sns.color_palette(palette_name, n_colors=256)
                                     if len(pops) == 1:
                                         pop_color_dict = {pops[0]: full_pal[128]}
@@ -1224,40 +1247,25 @@ else:
                                         indices = np.linspace(0, 255, len(pops)).astype(int)
                                         pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                                 
-                                # 1. The Updated Plot Generator (using Pop_Label)
-                                sns.histplot(
-                                    data=res['df'], 
-                                    x=res['feature_col'], 
-                                    hue='Pop_Label', 
-                                    palette=pop_color_dict, 
-                                    element='step', 
-                                    binwidth=gmm_bin_width, 
-                                    binrange=(0, gmm_x_max), 
-                                    kde=(display_style != "Histogram Only"), 
-                                    fill=(display_style != "Smooth Curve Only"), 
-                                    alpha=(0.2 if display_style != "Smooth Curve Only" else 0.0), 
-                                    line_kws={'linewidth': line_width}, 
-                                    linewidth=(line_width if display_style != "Smooth Curve Only" else 0), 
-                                    ax=ax_sub
-                                )
-                    
-                                # 2. Rebuild the legend for "Smooth Curve Only" so it isn't invisible
-                                if display_style == "Smooth Curve Only":
-                                    import matplotlib.lines as mlines
-                                    legend = ax_sub.get_legend()
-                                    if legend is not None:
-                                        handles, labels = [], []
-                                        for text_obj in legend.get_texts():
-                                            pop_name = text_obj.get_text().strip()
-                                            labels.append(pop_name)
-                                            # Using string keys matches perfectly now
-                                            color = pop_color_dict.get(pop_name, axes_color)
-                                            handles.append(mlines.Line2D([], [], color=color, linewidth=line_width))
+                                # --- FIXED: Custom Polygon Generation for Sub-Populations ---
+                                for pop in pops:
+                                    p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
+                                    if len(p_data) == 0: continue
+                                    c = pop_color_dict[pop]
+                                    
+                                    counts, edges = np.histogram(p_data, bins=bins_ext)
+                                    centers = edges[:-1] + (gmm_bin_width / 2)
+                                    x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                    y_line = np.concatenate(([0], counts, [0]))
+                                    
+                                    pop_lbl = f"Pop {pop}"
+                                    if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
+                                        ax_sub.hist(p_data, bins=bins_ext, color=c, alpha=0.3, edgecolor=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                    if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
+                                        ax_sub.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
+                                        if display_style == "Smooth Curve Only":
+                                            ax_sub.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
                                 
-                                        # Overwrite the invisible legend with our new solid colored lines
-                                        ax_sub.legend(handles=handles, labels=labels, title=legend.get_title().get_text())
-                                
-                                # Add Vertical Markers to Multi-Channel
                                 if central_marker != "None":
                                     for pop in pops:
                                         p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
@@ -1265,9 +1273,9 @@ else:
                                             val = None
                                             if central_marker == "Mean": val = p_data.mean()
                                             elif central_marker == "Median": val = p_data.median()
-                                            elif central_marker == "Mode": val = get_mode_from_kde(p_data)
+                                            elif central_marker == "Mode": val = calculate_stable_mode(p_data)
                                             
-                                            if val is not None and not pd.isna(val):
+                                            if val is not None and pd.notna(val):
                                                 ax_sub.axvline(val, color=pop_color_dict[pop], linestyle='--', linewidth=line_width, zorder=5)
                                                 
                                 apply_custom_style(ax_sub, f"Sub-population Breakdown: {ch} ({res['best_n']} Populations Found)", "Hydrodynamic Diameter (nm)", "Count", (0, gmm_x_max), bg_color, axes_color, show_grid, draw_legend=show_legend)
