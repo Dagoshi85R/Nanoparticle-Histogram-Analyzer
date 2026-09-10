@@ -1206,7 +1206,7 @@ else:
                                 plot_custom_distribution(ax2, res['df'], res['feature_col'], bins_ext, x_vals_ext, gmm_bin_width, c, '-', line_width, ch, display_style)
                             
                             ax1.set_xticks(range(1, max_pops + 1)) 
-                            apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=show_legend)
+                            apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
                             # --- FIXED: Auto-scale the BIC Y-axis to defeat bottom=0 ---
                             all_bics = [b for r in gmm_results.values() for b in r['bic']]
