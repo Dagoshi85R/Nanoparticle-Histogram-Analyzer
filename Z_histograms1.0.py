@@ -942,7 +942,7 @@ else:
                     x_col = 'Channel' if grouping == "Channel (Compare Samples)" else 'Sample Label'
                     hue_col = 'Sample Label' if grouping == "Channel (Compare Samples)" else 'Channel'
                     
-                    # --- FIXED: Mathematical Override for True Full Spectrum (Tab 3) ---
+                    # --- Mathematical Override for True Full Spectrum (Tab 3) ---
                     if palette_choice == "Custom (Sample Colors)":
                         active_palette = palette_dict
                     else:
@@ -970,6 +970,10 @@ else:
                     elif graph_type == "Box Plot": sns.boxplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, ax=ax_conc, fliersize=5, linewidth=line_width, width=bar_width)
                     
                     apply_custom_style(ax_conc, "Total Particle Concentration", x_col, "Concentration (particles/mL)", None, bg_color, axes_color, show_grid, draw_legend=show_legend)
+                    
+                    # --- FIXED: Rotate X-axis labels to prevent overlapping ---
+                    if grouping == "Sample (Compare Channels)":
+                        plt.setp(ax_conc.get_xticklabels(), rotation=45, ha="right")
                     
                     # Ensure the legend title (Channel vs Sample) matches the styling
                     if show_legend and ax_conc.get_legend():
