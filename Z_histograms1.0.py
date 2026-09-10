@@ -1561,7 +1561,7 @@ else:
                         data=morph_df, x='Size', hue='Group', ax=ax2, 
                         element="poly", fill=True, stat="density", 
                         palette=palette_colors, alpha=0.3, linewidth=line_width, legend=show_legend,
-                        binwidth=10  # <--- Forces the curve to lock exactly to your 10nm bins
+                        binwidth=bin_size  # <--- Forces the curve to lock exactly to your bins
                     )
                                         
                     # Polish axes and typography
