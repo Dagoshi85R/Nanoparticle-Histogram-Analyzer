@@ -437,6 +437,9 @@ else:
                 size_bin_width = st.slider("Size Bin Width (nm)", 1, 50, 10, key="s_bin")
                 max_x_size = st.number_input("Max X-Axis Limit (nm)", 100, 2000, 1000, key="s_max")
                 
+                # --- NEW: Logarithmic Scale Checkbox ---
+                log_x = st.checkbox("Logarithmic Scale", value=False, key="s_log_x", help="Applies a base-10 logarithmic scale to the size axis.")
+                
                 has_replicates = any(len([i for i in items if i['active']]) > 1 for items in processed_data['Size'].values())
                 rep_mode = "Treat Independent"
                 if has_replicates:
@@ -447,6 +450,9 @@ else:
                 bins = np.arange(0, max_x_size + size_bin_width, size_bin_width)
                 x_vals = np.linspace(0, max_x_size, 500)
                 line_styles = ['-', '--', ':', '-.']
+                
+                # Math fix: You cannot take the log of 0, so we start at 10nm if log is checked.
+                current_limit = (10, max_x_size) if log_x else (0, max_x_size)
                 
                 entities = []
                 for ch in active_channels:
@@ -488,13 +494,15 @@ else:
                     if multi_layout == "Overlay (Default)":
                         fig, ax = plt.subplots(figsize=(10, 5))
                         fig.patch.set_facecolor(bg_color)
+                        
+                        if log_x: ax.set_xscale('log')
+                        
                         for ent in entities:
                             tmp_df = pd.DataFrame({'val': ent['data']})
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                         
-                        apply_custom_style(ax, "Size Distribution", "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=show_legend)
-                        ax.set_xlim(left=0)
+                        apply_custom_style(ax, "Size Distribution", "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=show_legend)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
 
@@ -507,11 +515,13 @@ else:
                         
                         for i, ent in enumerate(entities):
                             ax = axes[i // cols, i % cols]
+                            if log_x: ax.set_xscale('log')
+                                
                             tmp_df = pd.DataFrame({'val': ent['data']})
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
-                            apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
-                            ax.set_xlim(left=0)
+                            
+                            apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
                             
                         for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
@@ -523,12 +533,13 @@ else:
                         fig.patch.set_facecolor(bg_color)
                         ax.set_facecolor(bg_color)
                         
+                        if log_x: ax.set_xscale('log')
+                        
                         max_h = 0
                         poly_data = []
                         for ent in entities:
                             clean_data = ent['data'].dropna()
                             if len(clean_data) > 1:
-                                # Mathematically anchor the joyplot ridges to 0 as well
                                 counts, edges = np.histogram(clean_data, bins=bins)
                                 centers = edges[:-1] + (size_bin_width / 2)
                                 x_line = np.concatenate(([0], centers, [edges[-1] + (size_bin_width / 2)]))
@@ -556,8 +567,7 @@ else:
                             
                         ax.set_yticks(y_ticks)
                         ax.set_yticklabels(y_labels, color=axes_color)
-                        apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", (0, max_x_size), bg_color, axes_color, show_grid, draw_legend=False)
-                        ax.set_xlim(left=0)
+                        apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
 
@@ -573,6 +583,9 @@ else:
                         fig, ax = plt.subplots(figsize=(10, 6))
                         fig.patch.set_facecolor(bg_color)
                         
+                        # Apply log scale to the Y-axis for Violin plots
+                        if log_x: ax.set_yscale('log')
+                        
                         inner_style = "quart" if central_marker in ["Median", "Mean", "Mode"] else None
                         
                         sns.violinplot(
@@ -585,7 +598,7 @@ else:
                         plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
                         
                         apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=show_legend)
-                        ax.set_ylim(0, max_x_size)
+                        ax.set_ylim(current_limit)
                         apply_custom_style(ax, "Violin Plot Size Comparison", "", "Hydrodynamic Diameter (nm)", None, bg_color, axes_color, show_grid, draw_legend=False)
                         
                         if show_legend:
@@ -609,7 +622,7 @@ else:
                         "Count": len(d), 
                         "Mean (nm)": round(d.mean(), 1), 
                         "Median (nm)": round(d.median(), 1), 
-                        "Mode (nm)": calculate_stable_mode(d), # Guaranteed stable mode!
+                        "Mode (nm)": calculate_stable_mode(d), 
                         "SD (nm)": round(d.std(), 1), 
                         "MAD (nm)": round(get_mad(d), 1), 
                         "Span": round(get_span(d), 3), 
