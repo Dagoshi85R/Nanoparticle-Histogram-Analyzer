@@ -279,6 +279,9 @@ def apply_custom_style(ax, title, xlabel, ylabel, xlim, bg, fg, grid, draw_legen
     ax.set_ylabel(ylabel, color=fg, fontsize=label_size)
     if xlim is not None: ax.set_xlim(xlim)
     
+# --- FIXED: Removes the empty white space below the zero line on "only smoothbar" ---
+    ax.set_ylim(bottom=0)
+
     # Apply tick size and axis box thickness
     ax.tick_params(colors=fg, labelsize=label_size, width=axes_width)
     for spine in ax.spines.values(): 
