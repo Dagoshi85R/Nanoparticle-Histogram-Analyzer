@@ -133,7 +133,7 @@ with st.sidebar:
     st.subheader("📖 Documentation")
     st.link_button(
         label="View Help Guide (PDF)", 
-        url="https://github.com/Dagoshi85R/Nanoparticle-Histogram-Analyzer/blob/main/Histogram_Analyzer_1.514.pdf",
+        url="https://github.com/Dagoshi85R/Nanoparticle-Histogram-Analyzer/blob/main/Histogram_Analyzer_1.529.pdf",
         use_container_width=True
     )
 
@@ -1041,7 +1041,7 @@ else:
                         if master_feature_col is None: master_feature_col = feature_col
                         
                         df_clean = df_clean.dropna(subset=[feature_col]).copy()
-                        df_clean = df_clean[(df_clean[feature_col] > 0) & (df_clean[feature_col] <= gmm_x_max)]
+                        df_clean = df_clean[df_clean[feature_col] > 0]
                         if df_clean.empty: continue
                         
                         X_log = np.log(df_clean[[feature_col]].values)
