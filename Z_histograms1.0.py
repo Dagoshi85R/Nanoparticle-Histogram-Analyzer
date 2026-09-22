@@ -1056,7 +1056,6 @@ else:
                         df_clean['Population'] = models[best_n - 1].predict(X_log) + 1
                         total_particles = len(df_clean)
                         
-                        # --- FIXED: Use the stable mode function for sub-populations ---
                         summary = df_clean.groupby('Population')[feature_col].agg(
                             Mean='mean', Median=np.median, Mode=calculate_stable_mode, 
                             SD='std', MAD=get_mad, Count='count', Span=get_span, FWHM=get_fwhm_from_kde
@@ -1154,7 +1153,6 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1))  
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # --- FIXED: Auto-scale the BIC Y-axis to defeat bottom=0 ---
                             min_bic, max_bic = min(res['bic']), max(res['bic'])
                             margin = (max_bic - min_bic) * 0.05 if max_bic != min_bic else max_bic * 0.05
                             ax1.set_ylim(min_bic - margin, max_bic + margin)
@@ -1162,10 +1160,11 @@ else:
                             res['df']['Pop_Label'] = res['df']['Population'].astype(str)
                             pops = np.sort(res['df']['Pop_Label'].unique())
                             
+                            # --- FIXED: Case-Insensitive Check guarantees Discrete Palettes work perfectly ---
                             palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                            discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
+                            discrete_palettes = ['colorblind', 'set1', 'set2', 'set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'paired', 'accent', 'dark2', 'tab10', 'tab20']
                             
-                            if palette_name in discrete_palettes:
+                            if palette_name.lower() in discrete_palettes:
                                 exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops))).as_hex()
                                 pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                             else:
@@ -1176,34 +1175,29 @@ else:
                                     indices = np.linspace(0, 255, len(pops)).astype(int)
                                     pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                             
-                            # --- FIXED: Dynamic Toggle for Sub-Populations ---
-                                for pop in pops:
-                                    p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
-                                    if len(p_data) == 0: continue
-                                    c = pop_color_dict[pop]
+                            for pop in pops:
+                                p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
+                                if len(p_data) == 0: continue
+                                c = pop_color_dict[pop]
+                                
+                                if use_kde and len(p_data) > 1:
+                                    x_line = x_vals_ext
+                                    y_line = gaussian_kde(p_data)(x_vals_ext) * len(p_data) * gmm_bin_width
+                                else:
+                                    counts, edges = np.histogram(p_data, bins=bins_ext)
+                                    centers = edges[:-1] + (gmm_bin_width / 2)
+                                    x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                                    y_line = np.concatenate(([0], counts, [0]))
+                                
+                                pop_lbl = f"Pop {pop}"
+                                if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
+                                    ax2.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                    ax2.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
                                     
-                                    if globals().get('use_kde', False) and len(p_data) > 1:
-                                        # 1. Smooth KDE Math (Evaluated strictly >= 0)
-                                        x_line = x_vals_ext
-                                        y_line = gaussian_kde(p_data)(x_vals_ext) * len(p_data) * gmm_bin_width
-                                    else:
-                                        # 2. Strict Polygon Math
-                                        counts, edges = np.histogram(p_data, bins=bins_ext)
-                                        centers = edges[:-1] + (gmm_bin_width / 2)
-                                        x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
-                                        y_line = np.concatenate(([0], counts, [0]))
-                                    
-                                    pop_lbl = f"Pop {pop}"
-                                    if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-                                        ax_target = ax2 if 'ax2' in locals() and num_channels == 1 else ax_sub
-                                        ax_target.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
-                                        ax_target.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
-                                        
-                                    if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-                                        ax_target = ax2 if 'ax2' in locals() and num_channels == 1 else ax_sub
-                                        ax_target.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
-                                        if display_style == "Smooth Curve Only":
-                                            ax_target.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
+                                if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
+                                    ax2.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
+                                    if display_style == "Smooth Curve Only":
+                                        ax2.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
 
                             if central_marker != "None":
                                 for pop in pops:
@@ -1237,7 +1231,6 @@ else:
                             ax1.set_xticks(range(1, max_pops + 1)) 
                             apply_custom_style(ax1, 'Model Scoring (Lowest BIC Wins)', 'Populations Tested', 'BIC Score', None, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # --- FIXED: Auto-scale the BIC Y-axis to defeat bottom=0 ---
                             all_bics = [b for r in gmm_results.values() for b in r['bic']]
                             min_bic, max_bic = min(all_bics), max(all_bics)
                             margin = (max_bic - min_bic) * 0.05 if max_bic != min_bic else max_bic * 0.05
@@ -1251,10 +1244,11 @@ else:
                                 res['df']['Pop_Label'] = res['df']['Population'].astype(str)
                                 pops = np.sort(res['df']['Pop_Label'].unique())
                                 
+                                # --- FIXED: Case-Insensitive Check guarantees Discrete Palettes work perfectly ---
                                 palette_name = PALETTES[palette_choice] if palette_choice != "Custom (Sample Colors)" else "viridis"
-                                discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
+                                discrete_palettes = ['colorblind', 'set1', 'set2', 'set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'paired', 'accent', 'dark2', 'tab10', 'tab20']
                                 
-                                if palette_name in discrete_palettes:
+                                if palette_name.lower() in discrete_palettes:
                                     exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops))).as_hex()
                                     pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                                 else:
@@ -1265,18 +1259,15 @@ else:
                                         indices = np.linspace(0, 255, len(pops)).astype(int)
                                         pop_color_dict = {pop: full_pal[idx] for pop, idx in zip(pops, indices)}
                                 
-                                # --- FIXED: Dynamic Toggle for Sub-Populations ---
                                 for pop in pops:
                                     p_data = res['df'][res['df']['Pop_Label'] == pop][res['feature_col']].dropna()
                                     if len(p_data) == 0: continue
                                     c = pop_color_dict[pop]
                                     
-                                    if globals().get('use_kde', False) and len(p_data) > 1:
-                                        # 1. Smooth KDE Math (Evaluated strictly >= 0)
+                                    if use_kde and len(p_data) > 1:
                                         x_line = x_vals_ext
                                         y_line = gaussian_kde(p_data)(x_vals_ext) * len(p_data) * gmm_bin_width
                                     else:
-                                        # 2. Strict Polygon Math
                                         counts, edges = np.histogram(p_data, bins=bins_ext)
                                         centers = edges[:-1] + (gmm_bin_width / 2)
                                         x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
@@ -1284,15 +1275,13 @@ else:
                                     
                                     pop_lbl = f"Pop {pop}"
                                     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-                                        ax_target = ax2 if 'ax2' in locals() and num_channels == 1 else ax_sub
-                                        ax_target.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
-                                        ax_target.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
+                                        ax_sub.hist(p_data, bins=bins_ext, histtype='step', color=c, linewidth=line_width, label=f"{pop_lbl} (Bars)" if display_style == "Histogram Only" else None)
+                                        ax_sub.hist(p_data, bins=bins_ext, histtype='stepfilled', color=c, alpha=0.2, linewidth=0)
                                         
                                     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-                                        ax_target = ax2 if 'ax2' in locals() and num_channels == 1 else ax_sub
-                                        ax_target.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
+                                        ax_sub.plot(x_line, y_line, color=c, linestyle='-', linewidth=line_width, label=pop_lbl)
                                         if display_style == "Smooth Curve Only":
-                                            ax_target.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
+                                            ax_sub.fill_between(x_line, 0, y_line, color=c, alpha=0.1)
                                 
                                 if central_marker != "None":
                                     for pop in pops:
