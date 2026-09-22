@@ -1166,10 +1166,10 @@ else:
                             discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
                             
                             if palette_name in discrete_palettes:
-                                exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
+                                exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops))).as_hex()
                                 pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                             else:
-                                full_pal = sns.color_palette(palette_name, n_colors=256)
+                                full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                                 if len(pops) == 1:
                                     pop_color_dict = {pops[0]: full_pal[128]}
                                 else:
@@ -1255,10 +1255,10 @@ else:
                                 discrete_palettes = ['colorblind', 'Set1', 'Set2', 'Set3', 'deep', 'muted', 'bright', 'pastel', 'dark', 'Paired', 'Accent', 'Dark2', 'tab10', 'tab20']
                                 
                                 if palette_name in discrete_palettes:
-                                    exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops)))
+                                    exact_colors = sns.color_palette(palette_name, n_colors=max(1, len(pops))).as_hex()
                                     pop_color_dict = {pop: exact_colors[idx] for idx, pop in enumerate(pops)}
                                 else:
-                                    full_pal = sns.color_palette(palette_name, n_colors=256)
+                                    full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                                     if len(pops) == 1:
                                         pop_color_dict = {pops[0]: full_pal[128]}
                                     else:
