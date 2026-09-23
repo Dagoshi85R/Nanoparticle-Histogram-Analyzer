@@ -436,7 +436,15 @@ else:
                 st.markdown("---")
                 enable_roi = st.checkbox("🔬 Enable ROI Gating", help="Calculate statistics for a specific size range.")
                 if enable_roi:
-                    roi_min, roi_max = st.slider("ROI Range (nm)", min_value=0, max_value=int(max_x_size), value=(30, 150), step=1)
+                    roi_col1, roi_col2 = st.columns(2)
+                    with roi_col1:
+                        roi_min = st.number_input("ROI Min (nm)", min_value=0, max_value=int(max_x_size), value=30, step=1)
+                    with roi_col2:
+                        roi_max = st.number_input("ROI Max (nm)", min_value=0, max_value=int(max_x_size), value=150, step=1)
+                    
+                    # Safety check in case a user accidentally types a Min that is higher than the Max
+                    if roi_min > roi_max:
+                        roi_min, roi_max = roi_max, roi_min
                 st.markdown("---")
                 
                 has_replicates = any(len([i for i in items if i['active']]) > 1 for items in processed_data['Size'].values())
