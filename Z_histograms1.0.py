@@ -430,8 +430,14 @@ else:
                 size_bin_width = st.slider("Size Bin Width (nm)", 1, 50, 10, key="s_bin")
                 max_x_size = st.number_input("Max X-Axis Limit (nm)", 100, 2000, 1000, key="s_max")
                 
-                # --- NEW: Logarithmic Scale Checkbox ---
                 log_x = st.checkbox("Logarithmic Scale", value=False, key="s_log_x", help="Applies a base-10 logarithmic scale to the size axis.")
+                
+                # --- NEW: ROI Gating Feature ---
+                st.markdown("---")
+                enable_roi = st.checkbox("🔬 Enable ROI Gating", help="Calculate statistics for a specific size range.")
+                if enable_roi:
+                    roi_min, roi_max = st.slider("ROI Range (nm)", min_value=0, max_value=int(max_x_size), value=(30, 150), step=1)
+                st.markdown("---")
                 
                 has_replicates = any(len([i for i in items if i['active']]) > 1 for items in processed_data['Size'].values())
                 rep_mode = "Treat Independent"
@@ -444,7 +450,6 @@ else:
                 x_vals = np.linspace(0, max_x_size, 500)
                 line_styles = ['-', '--', ':', '-.']
                 
-                # Math fix: You cannot take the log of 0, so we start at 10nm if log is checked.
                 current_limit = (10, max_x_size) if log_x else (0, max_x_size)
                 
                 entities = []
@@ -495,6 +500,12 @@ else:
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                         
+                        # --- NEW: Draw ROI Gate ---
+                        if enable_roi:
+                            ax.axvspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
+                            ax.axvline(roi_min, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
+                            ax.axvline(roi_max, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
+                            
                         apply_custom_style(ax, "Size Distribution", "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=show_legend)
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution")
@@ -514,6 +525,12 @@ else:
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             
+                            # --- NEW: Draw ROI Gate ---
+                            if enable_roi:
+                                ax.axvspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
+                                ax.axvline(roi_min, color='gray', linestyle='--', alpha=0.7)
+                                ax.axvline(roi_max, color='gray', linestyle='--', alpha=0.7)
+                                
                             apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
                             
                         for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
@@ -533,12 +550,10 @@ else:
                         for ent in entities:
                             clean_data = ent['data'].dropna()
                             if len(clean_data) > 1:
-                                if globals().get('use_kde', False):
-                                    # 1. Smooth KDE Math
+                                if use_kde:
                                     y_line = gaussian_kde(clean_data)(x_vals) * len(clean_data) * size_bin_width
                                     x_line = x_vals
                                 else:
-                                    # 2. Strict Polygon Math
                                     counts, edges = np.histogram(clean_data, bins=bins)
                                     centers = edges[:-1] + (size_bin_width / 2)
                                     x_line = np.concatenate(([0], centers, [edges[-1] + (size_bin_width / 2)]))
@@ -564,6 +579,12 @@ else:
                             y_ticks.append(current_offset)
                             y_labels.append(ent['label'])
                             
+                        # --- NEW: Draw ROI Gate ---
+                        if enable_roi:
+                            ax.axvspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
+                            ax.axvline(roi_min, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
+                            ax.axvline(roi_max, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
+                            
                         ax.set_yticks(y_ticks)
                         ax.set_yticklabels(y_labels, color=axes_color)
                         apply_custom_style(ax, "Ridgeline Size Comparison", "Hydrodynamic Diameter (nm)", "", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
@@ -582,7 +603,6 @@ else:
                         fig, ax = plt.subplots(figsize=(10, 6))
                         fig.patch.set_facecolor(bg_color)
                         
-                        # Apply log scale to the Y-axis for Violin plots
                         if log_x: ax.set_yscale('log')
                         
                         inner_style = "quart" if central_marker in ["Median", "Mean", "Mode"] else None
@@ -591,6 +611,12 @@ else:
                             data=df_violin, x='Sample', y='Size', hue='Sample',
                             palette=palette_dict, inner=inner_style, linewidth=line_width, ax=ax
                         )
+                        
+                        # --- NEW: Draw ROI Gate (Horizontal for Violin) ---
+                        if enable_roi:
+                            ax.axhspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
+                            ax.axhline(roi_min, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
+                            ax.axhline(roi_max, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
                         
                         ax.set_xlabel("")
                         ax.tick_params(colors=axes_color, labelsize=label_size)
@@ -609,6 +635,27 @@ else:
                         
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution_Violin")
+
+            # --- NEW: ROI Data Table ---
+            if enable_roi and entities:
+                st.markdown("---")
+                st.subheader(f"🎯 Region of Interest (ROI) Statistics: {roi_min} nm - {roi_max} nm")
+                roi_list = []
+                for ent in entities:
+                    d = ent["data"]
+                    total_c = len(d)
+                    roi_d = d[(d >= roi_min) & (d <= roi_max)]
+                    roi_c = len(roi_d)
+                    roi_pct = (roi_c / total_c * 100) if total_c > 0 else 0
+                    
+                    roi_list.append({
+                        "Sample": ent["label"],
+                        "Total Particles": total_c,
+                        "ROI Count": roi_c,
+                        "ROI Percentage (%)": round(roi_pct, 2)
+                    })
+                st.dataframe(pd.DataFrame(roi_list), use_container_width=True)
+                st.caption("💡 **Note on Concentration:** True volumetric concentration (particles/mL) requires sample dilution data, which is analyzed specifically in the Concentration module (Tab 3).")
 
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Size)")
