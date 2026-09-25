@@ -434,7 +434,7 @@ else:
                 
                 # --- NEW: ROI Gating Feature ---
                 st.markdown("---")
-                enable_roi = st.checkbox("🔬 Enable ROI Gating", help="Calculate statistics for a specific size range.")
+                enable_roi = st.checkbox("🔬 Enable ROI Gating", help="Calculate number of particles for a specific size range.")
                 if enable_roi:
                     roi_col1, roi_col2 = st.columns(2)
                     with roi_col1:
@@ -647,7 +647,7 @@ else:
             # --- NEW: ROI Data Table ---
             if enable_roi and entities:
                 st.markdown("---")
-                st.subheader(f"🎯 Region of Interest (ROI) Statistics: {roi_min} nm - {roi_max} nm")
+                st.subheader(f"🎯 Region of Interest (ROI) particles: {roi_min} nm - {roi_max} nm")
                 roi_list = []
                 for ent in entities:
                     d = ent["data"]
