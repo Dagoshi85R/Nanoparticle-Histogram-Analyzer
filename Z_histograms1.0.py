@@ -663,7 +663,7 @@ else:
                         "ROI Percentage (%)": round(roi_pct, 2)
                     })
                 st.dataframe(pd.DataFrame(roi_list), use_container_width=True)
-                st.caption("💡 **Note on Concentration:** True volumetric concentration (particles/mL) requires sample dilution data, which is analyzed specifically in the Concentration module (Tab 3).")
+                st.caption("💡 **Note on Concentration:** Concentration of particles is analyzed specifically in the Concentration module.")
 
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Size)")
