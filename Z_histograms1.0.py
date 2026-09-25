@@ -133,7 +133,7 @@ with st.sidebar:
     st.subheader("📖 Documentation")
     st.link_button(
         label="View Help Guide (PDF)", 
-        url="https://github.com/Dagoshi85R/Nanoparticle-Histogram-Analyzer/blob/main/Histogram_Analyzer_1.529.pdf",
+        url="https://github.com/Dagoshi85R/Nanoparticle-Histogram-Analyzer/blob/main/Histogram_Analyzer_1.532.pdf",
         use_container_width=True
     )
 
