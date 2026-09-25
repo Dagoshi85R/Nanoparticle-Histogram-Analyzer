@@ -8,6 +8,7 @@ import io
 import itertools
 import warnings
 import math
+import base64
 from sklearn.mixture import GaussianMixture
 from scipy.stats import gaussian_kde, mannwhitneyu, wasserstein_distance, anderson_ksamp
 
@@ -128,14 +129,29 @@ with st.sidebar:
     min_trace_length = 1
     link_radius = 10.0
 
-    # --- NEW: Help Guide Link Button ---
+    # --- NEW: Built-in PDF Viewer ---
     st.markdown("---")
     st.subheader("📖 Documentation")
-    st.link_button(
-        label="View Help Guide (PDF)", 
-        url="https://github.com/Dagoshi85R/Nanoparticle-Histogram-Analyzer/blob/main/Histogram_Analyzer_1.529.pdf",
-        use_container_width=True
-    )
+    
+    show_manual = st.toggle("Show Help Guide (PDF)", value=False)
+    
+    if show_manual:
+        # We use st.dialog (or just write to the main screen) to give the PDF plenty of space!
+        @st.dialog("Nanoparticle Histogram Analyzer - Help Guide", width="large")
+        def render_pdf_manual():
+            try:
+                # Make sure this filename exactly matches the one in your GitHub repo!
+                with open("Histogram_Analyzer_1.532.pdf", "rb") as f:
+                    base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+                
+                # The brilliant iframe code you found!
+                pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800px" type="application/pdf"></iframe>'
+                st.markdown(pdf_display, unsafe_allow_html=True)
+            except FileNotFoundError:
+                st.error("⚠️ PDF manual file not found in the app directory.")
+                
+        # Call the pop-up
+        render_pdf_manual()
 
 # --- Helper Functions ---
 def parse_file_info(uploaded_file):
@@ -434,7 +450,7 @@ else:
                 
                 # --- NEW: ROI Gating Feature ---
                 st.markdown("---")
-                enable_roi = st.checkbox("🔬 Enable ROI Gating", help="Calculate statistics for a specific size range.")
+                enable_roi = st.checkbox("🔬 Enable ROI Gating", help="Calculate number of particles for a specific size range.")
                 if enable_roi:
                     roi_col1, roi_col2 = st.columns(2)
                     with roi_col1:
@@ -647,7 +663,7 @@ else:
             # --- NEW: ROI Data Table ---
             if enable_roi and entities:
                 st.markdown("---")
-                st.subheader(f"🎯 Region of Interest (ROI) Statistics: {roi_min} nm - {roi_max} nm")
+                st.subheader(f"🎯 Region of Interest (ROI) particles: {roi_min} nm - {roi_max} nm")
                 roi_list = []
                 for ent in entities:
                     d = ent["data"]
@@ -663,7 +679,7 @@ else:
                         "ROI Percentage (%)": round(roi_pct, 2)
                     })
                 st.dataframe(pd.DataFrame(roi_list), use_container_width=True)
-                st.caption("💡 **Note on Concentration:** True volumetric concentration (particles/mL) requires sample dilution data, which is analyzed specifically in the Concentration module (Tab 3).")
+                st.caption("💡 **Note on Concentration:** Concentration of particles is analyzed specifically in the Concentration module.")
 
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Size)")
