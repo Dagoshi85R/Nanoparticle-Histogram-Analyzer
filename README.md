@@ -7,7 +7,7 @@ Small app to generate publication-ready histograms from raw `.zip` files generat
 ## ✨ Key Features
 
 *   **Publication-Ready Visualizations:** Highly customizable plots. Adjust background colors, axis colors, line thickness, grid lines, and plot styles (Bar, Smooth Curve, or Both), with the option of switching from a polygonal curve to a Kernel Density Estimate, independent of the bin size.
-*   **Multi-Sample Overlays:** Drag and drop multiple `.zip` files to compare biological replicates or multiplexed fluorescent channels on the exact same axes.
+*   **Multi-Sample Overlays:** Drag and drop multiple `.zip` files to compare biological replicates or multiplexed fluorescent channels on the exact same axes. Choose to view them independently, array them in Facet Grids or Ridgeline (Joyplot) plots, or pool replicates to calculate global medians and standard deviations.
 *   **Intelligent Pooling:** Automatically merge biological replicates to calculate pooled medians, modes, and global standard deviations.
 *   **Advanced Population Analysis (GMM):** Uses unsupervised machine learning (Gaussian Mixture Models) to automatically detect and mathematically separate sub-populations within a sample. 
 *   **Automated Cross-Stats:** Instantly calculates All-vs-All pairwise statistics across your active samples using:
@@ -17,14 +17,14 @@ Small app to generate publication-ready histograms from raw `.zip` files generat
 
 ---
 
-## 🛠️ The Four Analysis Modules
+## 🛠️ The Analysis Modules
 
-### 1. Multi-Sample Size
+### 1. Multi-Sample Size distribution
 Visualizes the Hydrodynamic Diameter (nm) of your particles. Calculates absolute counts, Mean, Median, Mode (via KDE peak interpolation), and Standard Deviation. You can independently toggle visibility for specific files to clean up your graphs.
-*   Region of Interest (ROI) Gating: Visually gate specific size ranges (e.g., 30 nm – 150 nm for EVs) to automatically calculate the exact particle count and percentage of the population falling within that specific Area Under the Curve (AUC).
+*   Region of Interest (ROI) Gating: Visually gate specific size ranges (e.g., 30 nm – 150 nm for EVs or separate small vesicles from large aggregates) to automatically calculate the exact particle count and percentage of the population falling within that specific Area Under the Curve (AUC).
     
 ### 2. Zeta Potential
-Analyzes charge distributions (mV). Because NTA charge tracking calculates bulk behavior, this module focuses strictly on the **Mean** and **Standard Deviation** rather than the mode. Note: Designed to compare multiple fluorescent channels within the *same* sample.
+Analyzes surface charge distributions (mV). Because NTA charge tracking calculates bulk behavior, this module focuses strictly on the **Mean** and **Standard Deviation** rather than the mode. Includes advanced bivariate scatter plots mapping Size vs. Zeta Potential with marginal histograms/densities along the axes, allowing you to directly correlate physical size with charge profiles across multiple fluorescent channels.
 
 ### 3. Concentration Analysis
 Generates customizable Bar Charts, Dot Plots (Strip), or Box Plots for absolute particle counts. 
@@ -32,10 +32,19 @@ Generates customizable Bar Charts, Dot Plots (Strip), or Box Plots for absolute 
 *   **Replicates:** Assign the exact same "Label" to multiple files in the Customize menu to automatically group them as replicates and generate Standard Deviation error bars.
 
 ### 4. Advanced Population Analysis (GMM)
-Ideal for heterogeneous samples (e.g., distinguishing EVs from protein aggregates). 
+Ideal for heterogeneous samples (e.g., distinguishing EVs from aggregates). 
+*   Uses unsupervised machine learning (Gaussian Mixture Models) to automatically detect and mathematically separate underlying sub-populations.
 *   Automatically calculates the optimal number of sub-populations using Bayesian Information Criterion (BIC).
 *   Calculates fluorescent positivity rates against the Scatter channel.
 *   Allows one-click export of a comprehensive multi-sheet `.xlsx` Excel report containing all global stats, sub-population summaries, BIC scores, and raw curve/histogram generation data.
+
+### 5. Colocalization
+Generation of plots showing the percentage of colocalization and single staining. 
+
+### 6. Colocalization Quality Control
+A diagnostic module for dual-labeled samples (experimental). Evaluates the physical reality of the machine's colocalization calls by analyzing two critical metrics:
+*   **Dye Stoichiometry:** Plots the Mean Intensity of Channel 1 vs Channel 2, calculating Pearson Correlation (r) and R-squared to determine if fluorophore binding is proportional or random.
+*   **Hydrodynamic Size Shift:** Compares the size of single-labeled particles against dual-labeled particles to ensure the labeling process isn't artificially inducing sample aggregation. Outputs a downloadable QC CSV report.
 
 ---
 
@@ -49,7 +58,7 @@ Simply drag and drop the raw `.zip` files generated directly by the ZetaSphere s
 
 ## 🚀 How to Run Locally
 
-If you prefer to run this app offline on your own machine rather than using the web link:
+While the app is primarily designed to be accessed via the web browser for ease of use, you can run it locally on your own machine for offline processing:
 
 1. Ensure Python 3.8+ is installed.
 2. Clone this repository and navigate to the folder.
