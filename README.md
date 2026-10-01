@@ -21,7 +21,7 @@ Small app to generate publication-ready histograms from raw `.zip` files generat
 
 ### 1. Multi-Sample Size
 Visualizes the Hydrodynamic Diameter (nm) of your particles. Calculates absolute counts, Mean, Median, Mode (via KDE peak interpolation), and Standard Deviation. You can independently toggle visibility for specific files to clean up your graphs.
-    *   *Region of Interest (ROI) Gating: Visually gate specific size ranges (e.g., 30 nm – 150 nm for EVs) to automatically calculate the exact particle count and percentage of the population falling within that specific Area Under the Curve (AUC).
+*   **Region of Interest (ROI) Gating: Visually gate specific size ranges (e.g., 30 nm – 150 nm for EVs) to automatically calculate the exact particle count and percentage of the population falling within that specific Area Under the Curve (AUC).
     
 ### 2. Zeta Potential
 Analyzes charge distributions (mV). Because NTA charge tracking calculates bulk behavior, this module focuses strictly on the **Mean** and **Standard Deviation** rather than the mode. Note: Designed to compare multiple fluorescent channels within the *same* sample.
