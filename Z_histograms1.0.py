@@ -525,18 +525,20 @@ else:
                         fig, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
                         fig.patch.set_facecolor(bg_color)
                         
-                        # --- NEW: Calculate True Global Max Y for Shared Axes ---
+                        # --- FIXED: Calculate True Global Max Y (Curve + Bars) ---
                         global_max_y = 0
                         if facet_share_y:
                             for ent in entities:
                                 clean_data = ent['data'].dropna()
                                 if len(clean_data) > 1:
+                                    counts, _ = np.histogram(clean_data, bins=bins)
+                                    bar_max = max(counts)
+                                    
+                                    curve_max = 0
                                     if use_kde:
-                                        y_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * size_bin_width)
-                                    else:
-                                        counts, _ = np.histogram(clean_data, bins=bins)
-                                        y_max = max(counts)
-                                    global_max_y = max(global_max_y, y_max)
+                                        curve_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * size_bin_width)
+                                        
+                                    global_max_y = max(global_max_y, bar_max, curve_max)
                         
                         for i, ent in enumerate(entities):
                             ax = axes[i // cols, i % cols]
@@ -808,18 +810,20 @@ else:
                         fig, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
                         fig.patch.set_facecolor(bg_color)
                         
-                        # --- NEW: Calculate True Global Max Y for Shared Axes (Zeta) ---
+                        # --- FIXED: Calculate True Global Max Y (Curve + Bars) ---
                         global_max_y = 0
                         if facet_share_y:
                             for ent in z_entities:
                                 clean_data = ent['data'].dropna()
                                 if len(clean_data) > 1:
+                                    counts, _ = np.histogram(clean_data, bins=z_bins)
+                                    bar_max = max(counts)
+                                    
+                                    curve_max = 0
                                     if use_kde:
-                                        y_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * zeta_bin_width)
-                                    else:
-                                        counts, _ = np.histogram(clean_data, bins=bins)
-                                        y_max = max(counts)
-                                    global_max_y = max(global_max_y, y_max)
+                                        curve_max = max(gaussian_kde(clean_data)(z_x_vals) * len(clean_data) * zeta_bin_width)
+                                        
+                                    global_max_y = max(global_max_y, bar_max, curve_max)
                         
                         for i, ent in enumerate(z_entities):
                             ax = axes[i // cols, i % cols]
