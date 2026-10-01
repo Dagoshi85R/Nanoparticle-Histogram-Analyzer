@@ -805,18 +805,39 @@ else:
                         cols = 2
                         rows = math.ceil(len(z_entities) / cols)
                         if rows == 0: rows = 1
-                        fig_zeta, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
-                        fig_zeta.patch.set_facecolor(bg_color)
+                        fig, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
+                        fig.patch.set_facecolor(bg_color)
+                        
+                        # --- NEW: Calculate True Global Max Y for Shared Axes (Zeta) ---
+                        global_max_y = 0
+                        if facet_share_y:
+                            for ent in z_entities:
+                                clean_data = ent['data'].dropna()
+                                if len(clean_data) > 1:
+                                    if use_kde:
+                                        y_max = max(gaussian_kde(clean_data)(z_x_vals) * len(clean_data) * zeta_bin_width)
+                                    else:
+                                        counts, _ = np.histogram(clean_data, bins=z_bins)
+                                        y_max = max(counts)
+                                    global_max_y = max(global_max_y, y_max)
+                        
                         for i, ent in enumerate(z_entities):
                             ax = axes[i // cols, i % cols]
+                                
                             tmp_df = pd.DataFrame({'val': ent['data']})
-                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax, tmp_df, 'val', z_bins, z_x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
-                            apply_custom_style(ax, ent['label'], "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=False)
-                        for j in range(len(z_entities), rows * cols): fig_zeta.delaxes(axes.flatten()[j])
+                            
+                            apply_custom_style(ax, ent['label'], "Zeta Potential (mV)", "Count", current_z_limit, bg_color, axes_color, show_grid, draw_legend=False)
+                            
+                            # --- NEW: Forcefully Apply the Global Max Y ---
+                            if facet_share_y and global_max_y > 0:
+                                ax.set_ylim(0, global_max_y * 1.05)
+                            
+                        for j in range(len(z_entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
-                        st.pyplot(fig_zeta)
-                        create_download_buttons(fig_zeta, "Zeta_Potential_Histogram")
+                        st.pyplot(fig)
+                        create_download_buttons(fig, "Zeta_Distribution")
                         
                     elif multi_layout == "Ridgeline (Joyplot)":
                         fig_zeta, ax_zeta = plt.subplots(figsize=(10, max(5, len(z_entities) * 0.85)))
