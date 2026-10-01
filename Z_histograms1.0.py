@@ -816,12 +816,14 @@ else:
                             for ent in z_entities:
                                 clean_data = ent['data'].dropna()
                                 if len(clean_data) > 1:
-                                    counts, _ = np.histogram(clean_data, bins=z_bins)
+                                    # Use 'bins' instead of 'z_bins'
+                                    counts, _ = np.histogram(clean_data, bins=bins)
                                     bar_max = max(counts)
                                     
                                     curve_max = 0
                                     if use_kde:
-                                        curve_max = max(gaussian_kde(clean_data)(z_x_vals) * len(clean_data) * zeta_bin_width)
+                                        # Use 'x_vals' instead of 'z_x_vals'
+                                        curve_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * zeta_bin_width)
                                         
                                     global_max_y = max(global_max_y, bar_max, curve_max)
                         
