@@ -6,7 +6,7 @@ Small app to generate publication-ready histograms from raw `.zip` files generat
 
 ## ✨ Key Features
 
-*   **Publication-Ready Visualizations:** Highly customizable plots. Adjust background colors, axis colors, line thickness, grid lines, and plot styles (Bar, Smooth Curve, or Both).
+*   **Publication-Ready Visualizations:** Highly customizable plots. Adjust background colors, axis colors, line thickness, grid lines, and plot styles (Bar, Smooth Curve, or Both), with the option of switching from a polygonal curve to a Kernel Density Estimate, independent of the bin size.
 *   **Multi-Sample Overlays:** Drag and drop multiple `.zip` files to compare biological replicates or multiplexed fluorescent channels on the exact same axes.
 *   **Intelligent Pooling:** Automatically merge biological replicates to calculate pooled medians, modes, and global standard deviations.
 *   **Advanced Population Analysis (GMM):** Uses unsupervised machine learning (Gaussian Mixture Models) to automatically detect and mathematically separate sub-populations within a sample. 
@@ -21,7 +21,8 @@ Small app to generate publication-ready histograms from raw `.zip` files generat
 
 ### 1. Multi-Sample Size
 Visualizes the Hydrodynamic Diameter (nm) of your particles. Calculates absolute counts, Mean, Median, Mode (via KDE peak interpolation), and Standard Deviation. You can independently toggle visibility for specific files to clean up your graphs.
-
+    *   *Region of Interest (ROI) Gating: Visually gate specific size ranges (e.g., 30 nm – 150 nm for EVs) to automatically calculate the exact particle count and percentage of the population falling within that specific Area Under the Curve (AUC).
+    
 ### 2. Zeta Potential
 Analyzes charge distributions (mV). Because NTA charge tracking calculates bulk behavior, this module focuses strictly on the **Mean** and **Standard Deviation** rather than the mode. Note: Designed to compare multiple fluorescent channels within the *same* sample.
 
