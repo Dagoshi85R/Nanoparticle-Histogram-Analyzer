@@ -8,7 +8,6 @@ import io
 import itertools
 import warnings
 import math
-import base64
 from sklearn.mixture import GaussianMixture
 from scipy.stats import gaussian_kde, mannwhitneyu, wasserstein_distance, anderson_ksamp
 
@@ -129,29 +128,14 @@ with st.sidebar:
     min_trace_length = 1
     link_radius = 10.0
 
-    # --- NEW: Built-in PDF Viewer ---
+    # --- NEW: Help Guide Link Button ---
     st.markdown("---")
     st.subheader("📖 Documentation")
-    
-    show_manual = st.toggle("Show Help Guide (PDF)", value=False)
-    
-    if show_manual:
-        # We use st.dialog (or just write to the main screen) to give the PDF plenty of space!
-        @st.dialog("Nanoparticle Histogram Analyzer - Help Guide", width="large")
-        def render_pdf_manual():
-            try:
-                # Make sure this filename exactly matches the one in your GitHub repo!
-                with open("Histogram_Analyzer_1.532.pdf", "rb") as f:
-                    base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-                
-                # The brilliant iframe code you found!
-                pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="800px" type="application/pdf"></iframe>'
-                st.markdown(pdf_display, unsafe_allow_html=True)
-            except FileNotFoundError:
-                st.error("⚠️ PDF manual file not found in the app directory.")
-                
-        # Call the pop-up
-        render_pdf_manual()
+    st.link_button(
+        label="View Help Guide (PDF)", 
+        url="https://github.com/Dagoshi85R/Nanoparticle-Histogram-Analyzer/blob/main/Histogram_Analyzer_1.532.pdf",
+        use_container_width=True
+    )
 
 # --- Helper Functions ---
 def parse_file_info(uploaded_file):
@@ -541,6 +525,19 @@ else:
                         fig, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
                         fig.patch.set_facecolor(bg_color)
                         
+                        # --- NEW: Calculate True Global Max Y for Shared Axes ---
+                        global_max_y = 0
+                        if facet_share_y:
+                            for ent in entities:
+                                clean_data = ent['data'].dropna()
+                                if len(clean_data) > 1:
+                                    if use_kde:
+                                        y_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * size_bin_width)
+                                    else:
+                                        counts, _ = np.histogram(clean_data, bins=bins)
+                                        y_max = max(counts)
+                                    global_max_y = max(global_max_y, y_max)
+                        
                         for i, ent in enumerate(entities):
                             ax = axes[i // cols, i % cols]
                             if log_x: ax.set_xscale('log')
@@ -549,13 +546,17 @@ else:
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             
-                            # --- NEW: Draw ROI Gate ---
+                            # Draw ROI Gate
                             if enable_roi:
                                 ax.axvspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
                                 ax.axvline(roi_min, color='gray', linestyle='--', alpha=0.7)
                                 ax.axvline(roi_max, color='gray', linestyle='--', alpha=0.7)
                                 
                             apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
+                            
+                            # --- NEW: Forcefully Apply the Global Max Y ---
+                            if facet_share_y and global_max_y > 0:
+                                ax.set_ylim(0, global_max_y * 1.05)
                             
                         for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
