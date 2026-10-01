@@ -815,9 +815,9 @@ else:
                                 clean_data = ent['data'].dropna()
                                 if len(clean_data) > 1:
                                     if use_kde:
-                                        y_max = max(gaussian_kde(clean_data)(z_x_vals) * len(clean_data) * zeta_bin_width)
+                                        y_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * zeta_bin_width)
                                     else:
-                                        counts, _ = np.histogram(clean_data, bins=z_bins)
+                                        counts, _ = np.histogram(clean_data, bins=bins)
                                         y_max = max(counts)
                                     global_max_y = max(global_max_y, y_max)
                         
@@ -825,7 +825,7 @@ else:
                             ax = axes[i // cols, i % cols]
                                 
                             tmp_df = pd.DataFrame({'val': ent['data']})
-                            plot_custom_distribution(ax, tmp_df, 'val', z_bins, z_x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             
                             apply_custom_style(ax, ent['label'], "Zeta Potential (mV)", "Count", current_z_limit, bg_color, axes_color, show_grid, draw_legend=False)
