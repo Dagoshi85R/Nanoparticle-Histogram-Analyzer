@@ -725,7 +725,7 @@ else:
             st.warning("No 'Zeta_Potential' measurement files detected.")
         else:
             available_zeta_channels = list(processed_data['Zeta_Potential'].keys())
-            active_zeta_channels = st.multiselect("Toggle Zeta Channels On/Off:", available_zeta_channels, default=available_zeta_channels, key="z_toggle")
+            active_zeta_channels = st.multiselect("Toggle Zeta Channels On/Off:", available_zeta_channels, default=available_zeta_channels)
             
             col3, col4 = st.columns([1, 3])
             with col3:
