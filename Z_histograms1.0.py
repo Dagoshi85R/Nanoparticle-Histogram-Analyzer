@@ -828,7 +828,7 @@ else:
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             
-                            apply_custom_style(ax, ent['label'], "Zeta Potential (mV)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
+                            apply_custom_style(ax, ent['label'], "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=False)
                             
                             # --- NEW: Forcefully Apply the Global Max Y ---
                             if facet_share_y and global_max_y > 0:
