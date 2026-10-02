@@ -207,15 +207,15 @@ def parse_file_info(filename):
                 
     return measurement, channel_name
 
-def extract_dataframe(uploaded_zip):
+@st.cache_data
+def extract_dataframe(file_name, _uploaded_zip):
     try:
-        with zipfile.ZipFile(uploaded_zip) as z:
+        with zipfile.ZipFile(_uploaded_zip) as z:
             csv_files = [f for f in z.namelist() if f.endswith('measurement_result.csv')]
             if not csv_files: csv_files = [f for f in z.namelist() if f.endswith('.csv')]
             if csv_files:
                 with z.open(csv_files[0]) as f: return pd.read_csv(f)
     except Exception:
-        # We silently pass here so it doesn't throw red errors if the Master Zip contains non-ZetaSphere zips
         pass 
     return None
 
@@ -445,7 +445,7 @@ else:
         f_obj.seek(0)
         
         measurement, channel = parse_file_info(f_obj)
-        df = extract_dataframe(f_obj)
+        df = extract_dataframe(item['filename'], f_obj)
         
         if df is not None:
             if channel not in processed_data.get(measurement, {}): 
