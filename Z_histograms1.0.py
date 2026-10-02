@@ -82,6 +82,20 @@ with st.sidebar:
     uploaded_files = st.file_uploader("Drag & Drop ZetaSphere .zip files (Multiple Samples Supported)", type=["zip"], accept_multiple_files=True)
     
     st.header("2. Display Customization")
+    force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
+    show_grid = st.checkbox("Show Grid Lines", value=False)
+    show_legend = st.checkbox("Show Legend", value=True)
+    # --- NEW: Conditional Legend Position ---
+    if show_legend:
+        legend_position = st.selectbox(
+            "Legend Position", 
+            ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left", "upper center", "lower center"],
+            index=0
+        )
+    else:
+        # Provide a safe invisible default so Python doesn't crash looking for the variable
+        legend_position = "best"
+    
     palette_choice = st.selectbox("Color Palette", list(PALETTES.keys()), help="Select a predefined colorset, or use your custom manual colors.")
     multi_layout = st.radio("Multi-Sample Layout", ["Overlay (Default)", "Facet Grid", "Ridgeline (Joyplot)", "Violin Plot"], help="Choose how multiple active samples are displayed.")
     
@@ -109,21 +123,6 @@ with st.sidebar:
     title_size = st.slider("Title Font Size", min_value=8, max_value=24, value=14, step=1)
     label_size = st.slider("Axis Label & Tick Font Size", min_value=8, max_value=20, value=10, step=1)
     legend_size = st.slider("Legend Font Size", min_value=6, max_value=16, value=10, step=1)
-    
-    show_grid = st.checkbox("Show Grid Lines", value=False)
-    show_legend = st.checkbox("Show Legend", value=True)
-    # --- NEW: Conditional Legend Position ---
-    if show_legend:
-        legend_position = st.selectbox(
-            "Legend Position", 
-            ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left", "upper center", "lower center"],
-            index=0
-        )
-    else:
-        # Provide a safe invisible default so Python doesn't crash looking for the variable
-        legend_position = "best"
-
-    force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
 
     # Invisible safe defaults to prevent NameErrors in other tabs
     min_trace_length = 1
