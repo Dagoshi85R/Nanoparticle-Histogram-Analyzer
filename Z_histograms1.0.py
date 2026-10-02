@@ -525,6 +525,21 @@ else:
                         fig, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
                         fig.patch.set_facecolor(bg_color)
                         
+                        # --- FIXED: Calculate True Global Max Y (Curve + Bars) ---
+                        global_max_y = 0
+                        if facet_share_y:
+                            for ent in entities:
+                                clean_data = ent['data'].dropna()
+                                if len(clean_data) > 1:
+                                    counts, _ = np.histogram(clean_data, bins=bins)
+                                    bar_max = max(counts)
+                                    
+                                    curve_max = 0
+                                    if use_kde:
+                                        curve_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * size_bin_width)
+                                        
+                                    global_max_y = max(global_max_y, bar_max, curve_max)
+                        
                         for i, ent in enumerate(entities):
                             ax = axes[i // cols, i % cols]
                             if log_x: ax.set_xscale('log')
@@ -533,13 +548,17 @@ else:
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             
-                            # --- NEW: Draw ROI Gate ---
+                            # Draw ROI Gate
                             if enable_roi:
                                 ax.axvspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
                                 ax.axvline(roi_min, color='gray', linestyle='--', alpha=0.7)
                                 ax.axvline(roi_max, color='gray', linestyle='--', alpha=0.7)
                                 
                             apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
+                            
+                            # --- NEW: Forcefully Apply the Global Max Y ---
+                            if facet_share_y and global_max_y > 0:
+                                ax.set_ylim(0, global_max_y * 1.05)
                             
                         for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
@@ -708,7 +727,7 @@ else:
             st.warning("No 'Zeta_Potential' measurement files detected.")
         else:
             available_zeta_channels = list(processed_data['Zeta_Potential'].keys())
-            active_zeta_channels = st.multiselect("Toggle Zeta Channels On/Off:", available_zeta_channels, default=available_zeta_channels, key="z_toggle")
+            active_zeta_channels = st.multiselect("Toggle Zeta Channels On/Off:", available_zeta_channels, default=available_zeta_channels)
             
             col3, col4 = st.columns([1, 3])
             with col3:
@@ -788,18 +807,43 @@ else:
                         cols = 2
                         rows = math.ceil(len(z_entities) / cols)
                         if rows == 0: rows = 1
-                        fig_zeta, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
-                        fig_zeta.patch.set_facecolor(bg_color)
+                        fig, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
+                        fig.patch.set_facecolor(bg_color)
+                        
+                        # --- FIXED: Calculate True Global Max Y (Curve + Bars) ---
+                        global_max_y = 0
+                        if facet_share_y:
+                            for ent in z_entities:
+                                clean_data = ent['data'].dropna()
+                                if len(clean_data) > 1:
+                                    # Use 'bins' instead of 'z_bins'
+                                    counts, _ = np.histogram(clean_data, bins=bins)
+                                    bar_max = max(counts)
+                                    
+                                    curve_max = 0
+                                    if use_kde:
+                                        # Use 'x_vals' instead of 'z_x_vals'
+                                        curve_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * zeta_bin_width)
+                                        
+                                    global_max_y = max(global_max_y, bar_max, curve_max)
+                        
                         for i, ent in enumerate(z_entities):
                             ax = axes[i // cols, i % cols]
+                                
                             tmp_df = pd.DataFrame({'val': ent['data']})
                             plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
+                            
                             apply_custom_style(ax, ent['label'], "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=False)
-                        for j in range(len(z_entities), rows * cols): fig_zeta.delaxes(axes.flatten()[j])
+                            
+                            # --- NEW: Forcefully Apply the Global Max Y ---
+                            if facet_share_y and global_max_y > 0:
+                                ax.set_ylim(0, global_max_y * 1.05)
+                            
+                        for j in range(len(z_entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
-                        st.pyplot(fig_zeta)
-                        create_download_buttons(fig_zeta, "Zeta_Potential_Histogram")
+                        st.pyplot(fig)
+                        create_download_buttons(fig, "Zeta_Distribution")
                         
                     elif multi_layout == "Ridgeline (Joyplot)":
                         fig_zeta, ax_zeta = plt.subplots(figsize=(10, max(5, len(z_entities) * 0.85)))
