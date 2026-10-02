@@ -408,12 +408,12 @@ else:
     
     # --- NEW: Master Zip Unpacking & Folder Name Detection ---
     files_to_process = []
-    for file in uploaded_files:
+    for file in sorted(uploaded_files, key=lambda x: x.name):
         file.seek(0) # Reset pointer just in case
         try:
             with zipfile.ZipFile(file) as z:
                 # Check if this zip contains nested zips (Master Zip)
-                nested_zips = [f for f in z.namelist() if f.endswith('.zip')]
+                nested_zips = sorted([f for f in z.namelist() if f.endswith('.zip')])
                 
                 if nested_zips:
                     for nested in nested_zips:
