@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import zipfile
+import re
 import io
 import itertools
 import warnings
@@ -137,10 +138,30 @@ with st.sidebar:
         use_container_width=True
     )
 
+
 # --- Helper Functions ---
-def parse_file_info(uploaded_file):
-    filename = uploaded_file.name
-    parts = filename.split('_')
+
+def parse_zetasphere_folder_name(path_string):
+    """Extracts the clean sample name from ZetaSphere folder paths inside a Master Zip."""
+    # Convert any Windows backslashes to standard forward slashes
+    parts = path_string.replace('\\', '/').split('/')
+    if len(parts) > 1:
+        folder_name = parts[-2] # Get the immediate parent folder
+        clean_name = folder_name.lstrip('.')
+        # Regex looks for exactly: 5digits_8digits_SAMPLENAME_dfNumber
+        match = re.search(r'^\d{5}_\d{8}_(.*)_df[\d\.]+$', clean_name)
+        if match:
+            return match.group(1)
+    return None
+
+def parse_file_info(filename):
+    # Allows it to accept either a Streamlit UploadedFile object or a raw string path
+    if hasattr(filename, 'name'):
+        filename = filename.name
+        
+    # Extract just the base filename in case a full path is passed
+    base_name = filename.replace('\\', '/').split('/')[-1]
+    parts = base_name.split('_')
     
     measurement = "Unknown"
     channel_str = ""
@@ -193,8 +214,9 @@ def extract_dataframe(uploaded_zip):
             if not csv_files: csv_files = [f for f in z.namelist() if f.endswith('.csv')]
             if csv_files:
                 with z.open(csv_files[0]) as f: return pd.read_csv(f)
-    except Exception as e:
-        st.error(f"Error reading {uploaded_zip.name}: {e}")
+    except Exception:
+        # We silently pass here so it doesn't throw red errors if the Master Zip contains non-ZetaSphere zips
+        pass 
     return None
 
 def find_data_column(df, possible_names):
@@ -383,17 +405,69 @@ if not uploaded_files:
     st.info("Please upload your ZetaSphere .zip files in the sidebar to begin analysis.")
 else:
     processed_data = {'Size': {}, 'Zeta_Potential': {}, 'Concentration': {}, 'Colocalization': {}}
+    
+    # --- NEW: Master Zip Unpacking & Folder Name Detection ---
+    files_to_process = []
     for file in uploaded_files:
-        measurement, channel = parse_file_info(file)
-        df = extract_dataframe(file)
+        file.seek(0) # Reset pointer just in case
+        try:
+            with zipfile.ZipFile(file) as z:
+                # Check if this zip contains nested zips (Master Zip)
+                nested_zips = [f for f in z.namelist() if f.endswith('.zip')]
+                
+                if nested_zips:
+                    for nested in nested_zips:
+                        custom_name = parse_zetasphere_folder_name(nested)
+                        
+                        # Extract the inner zip into memory
+                        inner_zip_bytes = z.read(nested)
+                        inner_file_obj = io.BytesIO(inner_zip_bytes)
+                        inner_file_obj.name = nested.split('/')[-1] # Attach original filename
+                        
+                        files_to_process.append({
+                            'file_obj': inner_file_obj,
+                            'filename': inner_file_obj.name,
+                            'custom_name': custom_name
+                        })
+                else:
+                    # It's a standard individual zip file
+                    files_to_process.append({
+                        'file_obj': file,
+                        'filename': file.name,
+                        'custom_name': None
+                    })
+        except Exception:
+            pass
+
+    # --- Standard Processing Loop (Using the extracted files) ---
+    for item in files_to_process:
+        f_obj = item['file_obj']
+        f_obj.seek(0)
+        
+        measurement, channel = parse_file_info(f_obj)
+        df = extract_dataframe(f_obj)
+        
         if df is not None:
-            if channel not in processed_data.get(measurement, {}): processed_data[measurement][channel] = []
+            if channel not in processed_data.get(measurement, {}): 
+                processed_data[measurement][channel] = []
+                
             default_color = '#000000'
             for raw_code, (name, hex_code) in DEFAULT_CHANNELS.items():
                 if name == channel: default_color = hex_code
+                
+            # --- NEW: Dynamically assign label based on extracted folder name! ---
+            if item['custom_name']:
+                final_label = f"{channel} - {item['custom_name']}"
+            else:
+                final_label = f"{channel} (Sample {len(processed_data[measurement][channel]) + 1})"
+                
             processed_data[measurement][channel].append({
-                'filename': file.name, 'df': df, 'label': f"{channel} (Sample {len(processed_data[measurement][channel]) + 1})",
-                'color': default_color, 'active': True, 'dilution': 1.0
+                'filename': item['filename'], 
+                'df': df, 
+                'label': final_label,
+                'color': default_color, 
+                'active': True, 
+                'dilution': 1.0
             })
 
     with st.expander("🎨 Customize Individual Samples (Labels & Colors)", expanded=True):
@@ -413,6 +487,7 @@ else:
                     col_idx += 1
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Multi-Sample Size", "Zeta Potential", "Concentration", "Population Analysis (GMM)", "Colocalization", "Colocalization Quality"])
+
 
     # ==========================================
     # TAB 1: SIZE OVERVIEW & MULTI-SAMPLE
