@@ -141,17 +141,18 @@ with st.sidebar:
 # --- Helper Functions ---
 
 def parse_zetasphere_folder_name(path_string):
-    """Extracts the clean sample name from ZetaSphere folder paths inside a Master Zip."""
-    # Convert any Windows backslashes to standard forward slashes
+    """Extracts the clean sample name and dilution factor from ZetaSphere folder paths inside a Master Zip."""
     parts = path_string.replace('\\', '/').split('/')
     if len(parts) > 1:
-        folder_name = parts[-2] # Get the immediate parent folder
+        folder_name = parts[-2] 
         clean_name = folder_name.lstrip('.')
-        # Regex looks for exactly: 5digits_8digits_SAMPLENAME_dfNumber
-        match = re.search(r'^\d{5}_\d{8}_(.*)_df[\d\.]+$', clean_name)
+        # Regex now captures BOTH the name (group 1) and the dilution number (group 2)
+        match = re.search(r'^\d{5}_\d{8}_(.*)_df([\d\.]+)$', clean_name)
         if match:
-            return match.group(1)
-    return None
+            sample_name = match.group(1)
+            dilution_factor = float(match.group(2))
+            return sample_name, dilution_factor
+    return None, 1.0
 
 def parse_file_info(filename):
     # Allows it to accept either a Streamlit UploadedFile object or a raw string path
@@ -405,40 +406,40 @@ if not uploaded_files:
 else:
     processed_data = {'Size': {}, 'Zeta_Potential': {}, 'Concentration': {}, 'Colocalization': {}}
     
-    # --- NEW: Master Zip Unpacking & Folder Name Detection ---
+    # --- Master Zip Unpacking & Folder Name Detection ---
     files_to_process = []
     for file in sorted(uploaded_files, key=lambda x: x.name):
-        file.seek(0) # Reset pointer just in case
+        file.seek(0)
         try:
             with zipfile.ZipFile(file) as z:
-                # Check if this zip contains nested zips (Master Zip)
                 nested_zips = sorted([f for f in z.namelist() if f.endswith('.zip')])
                 
                 if nested_zips:
                     for nested in nested_zips:
-                        custom_name = parse_zetasphere_folder_name(nested)
+                        # Grab BOTH the name and the dilution
+                        custom_name, custom_dilution = parse_zetasphere_folder_name(nested)
                         
-                        # Extract the inner zip into memory
                         inner_zip_bytes = z.read(nested)
                         inner_file_obj = io.BytesIO(inner_zip_bytes)
-                        inner_file_obj.name = nested.split('/')[-1] # Attach original filename
+                        inner_file_obj.name = nested.split('/')[-1] 
                         
                         files_to_process.append({
                             'file_obj': inner_file_obj,
                             'filename': inner_file_obj.name,
-                            'custom_name': custom_name
+                            'custom_name': custom_name,
+                            'custom_dilution': custom_dilution # <-- Added!
                         })
                 else:
-                    # It's a standard individual zip file
                     files_to_process.append({
                         'file_obj': file,
                         'filename': file.name,
-                        'custom_name': None
+                        'custom_name': None,
+                        'custom_dilution': 1.0 # Default if standard zip
                     })
         except Exception:
             pass
 
-    # --- Standard Processing Loop (Using the extracted files) ---
+    # --- Standard Processing Loop ---
     for item in files_to_process:
         f_obj = item['file_obj']
         f_obj.seek(0)
@@ -454,7 +455,6 @@ else:
             for raw_code, (name, hex_code) in DEFAULT_CHANNELS.items():
                 if name == channel: default_color = hex_code
                 
-            # --- NEW: Dynamically assign label based on extracted folder name! ---
             if item['custom_name']:
                 final_label = f"{channel} - {item['custom_name']}"
             else:
@@ -466,7 +466,7 @@ else:
                 'label': final_label,
                 'color': default_color, 
                 'active': True, 
-                'dilution': 1.0
+                'dilution': item['custom_dilution'] # <-- Dilution automatically applies here!
             })
 
     with st.expander("🎨 Customize Individual Samples (Labels & Colors)", expanded=True):
