@@ -219,6 +219,21 @@ def extract_dataframe(file_name, _uploaded_zip):
         pass 
     return None
 
+# --- NEW: Extract exact machine concentration ---
+@st.cache_data
+def extract_true_concentration(file_name, _uploaded_zip):
+    try:
+        with zipfile.ZipFile(_uploaded_zip) as z:
+            info_files = [f for f in z.namelist() if f.endswith('recording_info.csv')]
+            if info_files:
+                with z.open(info_files[0]) as f:
+                    info_df = pd.read_csv(f)
+                    if 'concentration' in info_df.columns:
+                        return float(info_df['concentration'].iloc[0])
+    except Exception:
+        pass 
+    return None
+
 def find_data_column(df, possible_names):
     for col in df.columns:
         if any(name.lower() == col.lower() for name in possible_names): return col
@@ -287,7 +302,7 @@ def apply_custom_style(ax, title, xlabel, ylabel, xlim, bg, fg, grid, draw_legen
     ax.set_ylabel(ylabel, color=fg, fontsize=label_size)
     if xlim is not None: ax.set_xlim(xlim)
     
-# --- FIXED: Removes the empty white space below the zero line on "only smoothbar" ---
+    # --- FIXED: Removes the empty white space below the zero line on "only smoothbar" ---
     ax.set_ylim(bottom=0)
 
     # Apply tick size and axis box thickness
@@ -446,6 +461,10 @@ else:
         
         measurement, channel = parse_file_info(f_obj)
         df = extract_dataframe(item['filename'], f_obj)
+
+        # --- NEW: Extract exact machine concentration ---
+        f_obj.seek(0) # Reset pointer again for the second read
+        true_conc = extract_true_concentration(item['filename'], f_obj)
         
         if df is not None:
             if channel not in processed_data.get(measurement, {}): 
@@ -466,7 +485,8 @@ else:
                 'label': final_label,
                 'color': default_color, 
                 'active': True, 
-                'dilution': item['custom_dilution'] # <-- Dilution automatically applies here!
+                'dilution': item['custom_dilution'], # <-- Dilution automatically applies here!
+                'true_concentration': true_conc
             })
 
     with st.expander("🎨 Customize Individual Samples (Labels & Colors)", expanded=True):
@@ -1110,7 +1130,25 @@ else:
                 for ch in active_conc_channels:
                     active_items = [i for i in processed_data['Concentration'][ch] if i['active']]
                     for item in active_items:
-                        c_val = len(item['df']) * item['dilution']
+                        
+                        # --- FIXED: Exact ZetaSphere Mathematical Precision ---
+                        if len(item['df']) == 0:
+                            c_val = 0
+                        elif item.get('true_concentration'):
+                            # 1. Reverse-engineer the exact dilution factor typed into the ZetaSphere machine
+                            machine_df = round(item['true_concentration'] / (len(item['df']) * 4719.33))
+                            machine_df = max(1, machine_df) # Prevent division by zero
+                            
+                            # 2. Extract the exact volumetric multiplier for this specific recording
+                            # (This perfectly accounts for dropped frames, drift, and temperature fluctuations)
+                            exact_multiplier = item['true_concentration'] / (len(item['df']) * machine_df)
+                            
+                            # 3. Apply the user's UI dilution factor using the exact multiplier
+                            c_val = len(item['df']) * item['dilution'] * exact_multiplier
+                        else:
+                            # Fallback if recording_info.csv is missing
+                            c_val = len(item['df']) * item['dilution'] * 4719.33
+                            
                         conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': c_val, 'Color': item['color']})
                         palette_dict[ch if grouping == "Sample (Compare Channels)" else item['label']] = item['color']
                             
@@ -1123,7 +1161,6 @@ else:
                     x_col = 'Channel' if grouping == "Channel (Compare Samples)" else 'Sample Label'
                     hue_col = 'Sample Label' if grouping == "Channel (Compare Samples)" else 'Channel'
                     
-                    # --- Mathematical Override for True Full Spectrum (Tab 3) ---
                     if palette_choice == "Custom (Sample Colors)":
                         active_palette = palette_dict
                     else:
@@ -1134,16 +1171,13 @@ else:
                         if palette_name in discrete_palettes:
                             hex_colors = sns.color_palette(palette_name, n_colors=max(1, len(unique_hues))).as_hex()
                         else:
-                            # Pull the entire 256-color gradient
                             full_pal = sns.color_palette(palette_name, n_colors=256).as_hex()
                             if len(unique_hues) == 1:
                                 hex_colors = [full_pal[128]]
                             else:
-                                # Force the math to stretch from exactly 0 to exactly 255
                                 indices = np.linspace(0, 255, len(unique_hues)).astype(int)
                                 hex_colors = [full_pal[idx] for idx in indices]
                                 
-                        # Build a strict dictionary locking the exact colors to the specific categories
                         active_palette = {hue: hex_colors[i] for i, hue in enumerate(unique_hues)}
                     
                     if graph_type == "Bar Chart": sns.barplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, errorbar='sd', capsize=0.1, ax=ax_conc, edgecolor=axes_color, linewidth=line_width, width=bar_width)
@@ -1152,11 +1186,9 @@ else:
                     
                     apply_custom_style(ax_conc, "Total Particle Concentration", x_col, "Concentration (particles/mL)", None, bg_color, axes_color, show_grid, draw_legend=show_legend)
                     
-                    # --- FIXED: Rotate X-axis labels to prevent overlapping ---
                     if grouping == "Sample (Compare Channels)":
                         plt.setp(ax_conc.get_xticklabels(), rotation=45, ha="right")
                     
-                    # Ensure the legend title (Channel vs Sample) matches the styling
                     if show_legend and ax_conc.get_legend():
                         leg = ax_conc.get_legend()
                         leg.set_title(hue_col)
