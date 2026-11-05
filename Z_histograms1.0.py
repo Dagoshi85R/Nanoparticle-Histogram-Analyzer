@@ -485,7 +485,7 @@ else:
                 'label': final_label,
                 'color': default_color, 
                 'active': True, 
-                'dilution': item['custom_dilution'] # <-- Dilution automatically applies here!
+                'dilution': item['custom_dilution'], # <-- Dilution automatically applies here!
                 'true_concentration': true_conc
             })
 
