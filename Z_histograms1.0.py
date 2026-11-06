@@ -82,104 +82,96 @@ with st.sidebar:
     st.header("1. Upload Data")
     uploaded_files = st.file_uploader("Drag & Drop ZetaSphere .zip files (Multiple Samples Supported)", type=["zip"], accept_multiple_files=True)
     
-    st.header("2. Display Customization")
+    # --- FIXED: LOAD SETTINGS ---
+    st.header("2. Save & Load Settings")
+    uploaded_settings = st.file_uploader("Upload a saved settings file (.json)", type=["json"])
+    if uploaded_settings is not None:
+        # Prevent infinite reload loops by checking if we just loaded this file
+        if st.session_state.get("last_loaded_file") != uploaded_settings.name:
+            try:
+                saved_prefs = json.load(uploaded_settings)
+                for k, v in saved_prefs.items():
+                    st.session_state[k] = v
+                
+                # Remember that we loaded this file and force a UI refresh
+                st.session_state["last_loaded_file"] = uploaded_settings.name
+                st.rerun() 
+            except Exception:
+                st.error("Invalid settings file.")
+
+    st.header("3. Display Customization")
     
-    force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=st.session_state.get("saved_force_solid", False))
-    show_grid = st.checkbox("Show Grid Lines", value=st.session_state.get("saved_show_grid", False))
-    show_legend = st.checkbox("Show Legend", value=st.session_state.get("saved_show_legend", True))
+    # --- FIXED: Using key= binds the widgets directly to the memory ---
+    force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", key="saved_force_solid")
+    show_grid = st.checkbox("Show Grid Lines", key="saved_show_grid")
     
-    # Conditional Legend Position
+    # Use 'value=' to define the default ONLY on the very first time the app is opened
+    show_legend = st.checkbox("Show Legend", value=True, key="saved_show_legend")
+    
     if show_legend:
         leg_opts = ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left", "upper center", "lower center"]
-        saved_leg = st.session_state.get("saved_legend_position", "best")
-        leg_idx = leg_opts.index(saved_leg) if saved_leg in leg_opts else 0
-        
-        legend_position = st.selectbox("Legend Position", leg_opts, index=leg_idx)
+        legend_position = st.selectbox("Legend Position", leg_opts, key="saved_legend_position")
     else:
         legend_position = "best"
     
-    # Palette Choice
-    pal_opts = list(PALETTES.keys())
-    saved_pal = st.session_state.get("saved_palette_choice", "Custom (Sample Colors)")
-    pal_idx = pal_opts.index(saved_pal) if saved_pal in pal_opts else 0
-    palette_choice = st.selectbox("Color Palette", pal_opts, index=pal_idx, help="Select a predefined colorset, or use your custom manual colors.")
+    palette_choice = st.selectbox("Color Palette", list(PALETTES.keys()), key="saved_palette_choice", help="Select a predefined colorset, or use your custom manual colors.")
     
-    # Multi Layout
     lay_opts = ["Overlay (Default)", "Facet Grid", "Ridgeline (Joyplot)", "Violin Plot"]
-    saved_lay = st.session_state.get("saved_multi_layout", "Overlay (Default)")
-    lay_idx = lay_opts.index(saved_lay) if saved_lay in lay_opts else 0
-    multi_layout = st.radio("Multi-Sample Layout", lay_opts, index=lay_idx, help="Choose how multiple active samples are displayed.")
+    multi_layout = st.radio("Multi-Sample Layout", lay_opts, key="saved_multi_layout", help="Choose how multiple active samples are displayed.")
     
     if multi_layout == "Facet Grid":
-        facet_share_y = st.checkbox("Share Y-Axis across Facets", value=st.session_state.get("saved_facet_share_y", True), help="Keep all subplots on the exact same vertical scale.")
+        facet_share_y = st.checkbox("Share Y-Axis across Facets", value=True, key="saved_facet_share_y", help="Keep all subplots on the exact same vertical scale.")
     else:
         facet_share_y = False
         
-    # Plot Style
     style_opts = ["Both (Bar + Curve)", "Smooth Curve Only", "Histogram Only"]
-    saved_style = st.session_state.get("saved_display_style", "Both (Bar + Curve)")
-    style_idx = style_opts.index(saved_style) if saved_style in style_opts else 0
-    display_style = st.radio("Plot Style", style_opts, index=style_idx)
+    display_style = st.radio("Plot Style", style_opts, key="saved_display_style")
     
-    use_kde = st.checkbox("Use Smooth KDE Curves", value=st.session_state.get("saved_use_kde", False), help="Enable traditional, smoothed Kernel Density curves instead of strict bin-anchored polygons.")
+    use_kde = st.checkbox("Use Smooth KDE Curves", key="saved_use_kde", help="Enable traditional, smoothed Kernel Density curves instead of strict bin-anchored polygons.")
     
-    # Central Marker
     marker_opts = ["None", "Mean", "Median", "Mode"]
-    saved_marker = st.session_state.get("saved_central_marker", "None")
-    marker_idx = marker_opts.index(saved_marker) if saved_marker in marker_opts else 0
-    central_marker = st.radio("Draw Vertical Marker", marker_opts, index=marker_idx)
+    central_marker = st.radio("Draw Vertical Marker", marker_opts, key="saved_central_marker")
     
     col_c1, col_c2 = st.columns(2)
     with col_c1:
-        bg_color = st.color_picker("Background Color", st.session_state.get("saved_bg_color", "#FFFFFF"))
+        bg_color = st.color_picker("Background Color", value="#FFFFFF", key="saved_bg_color")
     with col_c2:
-        axes_color = st.color_picker("Axes & Text Color", st.session_state.get("saved_axes_color", "#000000"))
+        axes_color = st.color_picker("Axes & Text Color", value="#000000", key="saved_axes_color")
         
     st.markdown("---")
     st.markdown("**Graph Sizing & Typography**")
-    line_width = st.slider("Plot Line Thickness", min_value=0.5, max_value=5.0, value=st.session_state.get("saved_line_width", 1.5), step=0.5)
-    axes_width = st.slider("Axis Box Thickness", min_value=0.5, max_value=3.0, value=st.session_state.get("saved_axes_width", 1.0), step=0.5)
-    title_size = st.slider("Title Font Size", min_value=8, max_value=24, value=st.session_state.get("saved_title_size", 14), step=1)
-    label_size = st.slider("Axis Label & Tick Font Size", min_value=8, max_value=20, value=st.session_state.get("saved_label_size", 10), step=1)
-    legend_size = st.slider("Legend Font Size", min_value=6, max_value=16, value=st.session_state.get("saved_legend_size", 10), step=1)
+    line_width = st.slider("Plot Line Thickness", min_value=0.5, max_value=5.0, value=1.5, step=0.5, key="saved_line_width")
+    axes_width = st.slider("Axis Box Thickness", min_value=0.5, max_value=3.0, value=1.0, step=0.5, key="saved_axes_width")
+    title_size = st.slider("Title Font Size", min_value=8, max_value=24, value=14, step=1, key="saved_title_size")
+    label_size = st.slider("Axis Label & Tick Font Size", min_value=8, max_value=20, value=10, step=1, key="saved_label_size")
+    legend_size = st.slider("Legend Font Size", min_value=6, max_value=16, value=10, step=1, key="saved_legend_size")
 
     # Invisible safe defaults to prevent NameErrors in other tabs
     min_trace_length = 1
     link_radius = 10.0
 
-    # --- NEW: LOAD SETTINGS ---
-    st.header("Save & Load Settings")
-    uploaded_settings = st.file_uploader("Upload a saved settings file (.json)", type=["json"])
-    if uploaded_settings is not None:
-        try:
-            saved_prefs = json.load(uploaded_settings)
-            for key, val in saved_prefs.items():
-                st.session_state[key] = val
-            st.success("Settings loaded! 🎉")
-        except Exception:
-            st.error("Invalid settings file.")
-
-
-    # --- NEW: SAVE SETTINGS ---
+    # --- SAVE SETTINGS ---
     st.markdown("---")
+    
+    # We pull the current values directly from Streamlit's memory keys
     current_settings = {
-        "saved_force_solid": force_solid,
-        "saved_show_grid": show_grid,
-        "saved_show_legend": show_legend,
-        "saved_legend_position": legend_position,
-        "saved_palette_choice": palette_choice,
-        "saved_multi_layout": multi_layout,
-        "saved_facet_share_y": facet_share_y,
-        "saved_display_style": display_style,
-        "saved_use_kde": use_kde,
-        "saved_central_marker": central_marker,
-        "saved_bg_color": bg_color,
-        "saved_axes_color": axes_color,
-        "saved_line_width": line_width,
-        "saved_axes_width": axes_width,
-        "saved_title_size": title_size,
-        "saved_label_size": label_size,
-        "saved_legend_size": legend_size,
+        "saved_force_solid": st.session_state.get("saved_force_solid", False),
+        "saved_show_grid": st.session_state.get("saved_show_grid", False),
+        "saved_show_legend": st.session_state.get("saved_show_legend", True),
+        "saved_legend_position": st.session_state.get("saved_legend_position", "best"),
+        "saved_palette_choice": st.session_state.get("saved_palette_choice", "Custom (Sample Colors)"),
+        "saved_multi_layout": st.session_state.get("saved_multi_layout", "Overlay (Default)"),
+        "saved_facet_share_y": st.session_state.get("saved_facet_share_y", True),
+        "saved_display_style": st.session_state.get("saved_display_style", "Both (Bar + Curve)"),
+        "saved_use_kde": st.session_state.get("saved_use_kde", False),
+        "saved_central_marker": st.session_state.get("saved_central_marker", "None"),
+        "saved_bg_color": st.session_state.get("saved_bg_color", "#FFFFFF"),
+        "saved_axes_color": st.session_state.get("saved_axes_color", "#000000"),
+        "saved_line_width": st.session_state.get("saved_line_width", 1.5),
+        "saved_axes_width": st.session_state.get("saved_axes_width", 1.0),
+        "saved_title_size": st.session_state.get("saved_title_size", 14),
+        "saved_label_size": st.session_state.get("saved_label_size", 10),
+        "saved_legend_size": st.session_state.get("saved_legend_size", 10),
     }
     
     st.download_button(
