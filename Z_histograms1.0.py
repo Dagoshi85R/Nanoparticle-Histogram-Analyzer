@@ -9,6 +9,7 @@ import io
 import itertools
 import warnings
 import math
+import json
 from sklearn.mixture import GaussianMixture
 from scipy.stats import gaussian_kde, mannwhitneyu, wasserstein_distance, anderson_ksamp
 
@@ -81,52 +82,112 @@ with st.sidebar:
     st.header("1. Upload Data")
     uploaded_files = st.file_uploader("Drag & Drop ZetaSphere .zip files (Multiple Samples Supported)", type=["zip"], accept_multiple_files=True)
     
-    st.header("2. Display Customization")
-    force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=False)
-    show_grid = st.checkbox("Show Grid Lines", value=False)
-    show_legend = st.checkbox("Show Legend", value=True)
-    # --- NEW: Conditional Legend Position ---
+    # --- NEW: LOAD SETTINGS ---
+    st.header("2. Save & Load Settings")
+    uploaded_settings = st.file_uploader("Upload a saved settings file (.json)", type=["json"])
+    if uploaded_settings is not None:
+        try:
+            saved_prefs = json.load(uploaded_settings)
+            for key, val in saved_prefs.items():
+                st.session_state[key] = val
+            st.success("Settings loaded! 🎉")
+        except Exception:
+            st.error("Invalid settings file.")
+
+    st.header("3. Display Customization")
+    
+    force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=st.session_state.get("saved_force_solid", False))
+    show_grid = st.checkbox("Show Grid Lines", value=st.session_state.get("saved_show_grid", False))
+    show_legend = st.checkbox("Show Legend", value=st.session_state.get("saved_show_legend", True))
+    
+    # Conditional Legend Position
     if show_legend:
-        legend_position = st.selectbox(
-            "Legend Position", 
-            ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left", "upper center", "lower center"],
-            index=0
-        )
+        leg_opts = ["best", "upper right", "upper left", "lower right", "lower left", "center right", "center left", "upper center", "lower center"]
+        saved_leg = st.session_state.get("saved_legend_position", "best")
+        leg_idx = leg_opts.index(saved_leg) if saved_leg in leg_opts else 0
+        
+        legend_position = st.selectbox("Legend Position", leg_opts, index=leg_idx)
     else:
-        # Provide a safe invisible default so Python doesn't crash looking for the variable
         legend_position = "best"
     
-    palette_choice = st.selectbox("Color Palette", list(PALETTES.keys()), help="Select a predefined colorset, or use your custom manual colors.")
-    multi_layout = st.radio("Multi-Sample Layout", ["Overlay (Default)", "Facet Grid", "Ridgeline (Joyplot)", "Violin Plot"], help="Choose how multiple active samples are displayed.")
+    # Palette Choice
+    pal_opts = list(PALETTES.keys())
+    saved_pal = st.session_state.get("saved_palette_choice", "Custom (Sample Colors)")
+    pal_idx = pal_opts.index(saved_pal) if saved_pal in pal_opts else 0
+    palette_choice = st.selectbox("Color Palette", pal_opts, index=pal_idx, help="Select a predefined colorset, or use your custom manual colors.")
+    
+    # Multi Layout
+    lay_opts = ["Overlay (Default)", "Facet Grid", "Ridgeline (Joyplot)", "Violin Plot"]
+    saved_lay = st.session_state.get("saved_multi_layout", "Overlay (Default)")
+    lay_idx = lay_opts.index(saved_lay) if saved_lay in lay_opts else 0
+    multi_layout = st.radio("Multi-Sample Layout", lay_opts, index=lay_idx, help="Choose how multiple active samples are displayed.")
     
     if multi_layout == "Facet Grid":
-        facet_share_y = st.checkbox("Share Y-Axis across Facets", value=True, help="Keep all subplots on the exact same vertical scale.")
+        facet_share_y = st.checkbox("Share Y-Axis across Facets", value=st.session_state.get("saved_facet_share_y", True), help="Keep all subplots on the exact same vertical scale.")
     else:
         facet_share_y = False
         
-    display_style = st.radio("Plot Style", ["Both (Bar + Curve)", "Smooth Curve Only", "Histogram Only"])
-    # --- NEW: KDE Toggle ---
-    use_kde = st.checkbox("Use Smooth KDE Curves", value=False, help="Enable traditional, smoothed Kernel Density curves instead of strict bin-anchored polygons.")
+    # Plot Style
+    style_opts = ["Both (Bar + Curve)", "Smooth Curve Only", "Histogram Only"]
+    saved_style = st.session_state.get("saved_display_style", "Both (Bar + Curve)")
+    style_idx = style_opts.index(saved_style) if saved_style in style_opts else 0
+    display_style = st.radio("Plot Style", style_opts, index=style_idx)
     
-    central_marker = st.radio("Draw Vertical Marker", ["None", "Mean", "Median", "Mode"])
+    use_kde = st.checkbox("Use Smooth KDE Curves", value=st.session_state.get("saved_use_kde", False), help="Enable traditional, smoothed Kernel Density curves instead of strict bin-anchored polygons.")
+    
+    # Central Marker
+    marker_opts = ["None", "Mean", "Median", "Mode"]
+    saved_marker = st.session_state.get("saved_central_marker", "None")
+    marker_idx = marker_opts.index(saved_marker) if saved_marker in marker_opts else 0
+    central_marker = st.radio("Draw Vertical Marker", marker_opts, index=marker_idx)
     
     col_c1, col_c2 = st.columns(2)
     with col_c1:
-        bg_color = st.color_picker("Background Color", "#FFFFFF")
+        bg_color = st.color_picker("Background Color", st.session_state.get("saved_bg_color", "#FFFFFF"))
     with col_c2:
-        axes_color = st.color_picker("Axes & Text Color", "#000000")
+        axes_color = st.color_picker("Axes & Text Color", st.session_state.get("saved_axes_color", "#000000"))
         
     st.markdown("---")
     st.markdown("**Graph Sizing & Typography**")
-    line_width = st.slider("Plot Line Thickness", min_value=0.5, max_value=5.0, value=1.5, step=0.5)
-    axes_width = st.slider("Axis Box Thickness", min_value=0.5, max_value=3.0, value=1.0, step=0.5)
-    title_size = st.slider("Title Font Size", min_value=8, max_value=24, value=14, step=1)
-    label_size = st.slider("Axis Label & Tick Font Size", min_value=8, max_value=20, value=10, step=1)
-    legend_size = st.slider("Legend Font Size", min_value=6, max_value=16, value=10, step=1)
+    line_width = st.slider("Plot Line Thickness", min_value=0.5, max_value=5.0, value=st.session_state.get("saved_line_width", 1.5), step=0.5)
+    axes_width = st.slider("Axis Box Thickness", min_value=0.5, max_value=3.0, value=st.session_state.get("saved_axes_width", 1.0), step=0.5)
+    title_size = st.slider("Title Font Size", min_value=8, max_value=24, value=st.session_state.get("saved_title_size", 14), step=1)
+    label_size = st.slider("Axis Label & Tick Font Size", min_value=8, max_value=20, value=st.session_state.get("saved_label_size", 10), step=1)
+    legend_size = st.slider("Legend Font Size", min_value=6, max_value=16, value=st.session_state.get("saved_legend_size", 10), step=1)
 
     # Invisible safe defaults to prevent NameErrors in other tabs
     min_trace_length = 1
     link_radius = 10.0
+
+    # --- NEW: SAVE SETTINGS ---
+    st.markdown("---")
+    current_settings = {
+        "saved_force_solid": force_solid,
+        "saved_show_grid": show_grid,
+        "saved_show_legend": show_legend,
+        "saved_legend_position": legend_position,
+        "saved_palette_choice": palette_choice,
+        "saved_multi_layout": multi_layout,
+        "saved_facet_share_y": facet_share_y,
+        "saved_display_style": display_style,
+        "saved_use_kde": use_kde,
+        "saved_central_marker": central_marker,
+        "saved_bg_color": bg_color,
+        "saved_axes_color": axes_color,
+        "saved_line_width": line_width,
+        "saved_axes_width": axes_width,
+        "saved_title_size": title_size,
+        "saved_label_size": label_size,
+        "saved_legend_size": legend_size,
+    }
+    
+    st.download_button(
+        label="📥 Download Current Settings",
+        data=json.dumps(current_settings, indent=4),
+        file_name="ZetaSphere_Graph_Settings.json",
+        mime="application/json",
+        use_container_width=True
+    )
 
     # --- NEW: Help Guide Link Button ---
     st.markdown("---")
