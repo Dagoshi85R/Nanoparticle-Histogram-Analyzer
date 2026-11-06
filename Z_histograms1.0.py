@@ -82,19 +82,7 @@ with st.sidebar:
     st.header("1. Upload Data")
     uploaded_files = st.file_uploader("Drag & Drop ZetaSphere .zip files (Multiple Samples Supported)", type=["zip"], accept_multiple_files=True)
     
-    # --- NEW: LOAD SETTINGS ---
-    st.header("2. Save & Load Settings")
-    uploaded_settings = st.file_uploader("Upload a saved settings file (.json)", type=["json"])
-    if uploaded_settings is not None:
-        try:
-            saved_prefs = json.load(uploaded_settings)
-            for key, val in saved_prefs.items():
-                st.session_state[key] = val
-            st.success("Settings loaded! 🎉")
-        except Exception:
-            st.error("Invalid settings file.")
-
-    st.header("3. Display Customization")
+    st.header("2. Display Customization")
     
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", value=st.session_state.get("saved_force_solid", False))
     show_grid = st.checkbox("Show Grid Lines", value=st.session_state.get("saved_show_grid", False))
@@ -158,6 +146,19 @@ with st.sidebar:
     # Invisible safe defaults to prevent NameErrors in other tabs
     min_trace_length = 1
     link_radius = 10.0
+
+    # --- NEW: LOAD SETTINGS ---
+    st.header("Save & Load Settings")
+    uploaded_settings = st.file_uploader("Upload a saved settings file (.json)", type=["json"])
+    if uploaded_settings is not None:
+        try:
+            saved_prefs = json.load(uploaded_settings)
+            for key, val in saved_prefs.items():
+                st.session_state[key] = val
+            st.success("Settings loaded! 🎉")
+        except Exception:
+            st.error("Invalid settings file.")
+
 
     # --- NEW: SAVE SETTINGS ---
     st.markdown("---")
