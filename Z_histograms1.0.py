@@ -172,6 +172,21 @@ with st.sidebar:
         "saved_title_size": st.session_state.get("saved_title_size", 14),
         "saved_label_size": st.session_state.get("saved_label_size", 10),
         "saved_legend_size": st.session_state.get("saved_legend_size", 10),
+        "s_bin": st.session_state.get("s_bin", 10), #tab1
+        "s_max": st.session_state.get("s_max", 1000), #tab1
+        "s_log_x": st.session_state.get("s_log_x", False), #tab1
+        "z_bin": st.session_state.get("z_bin", 5), #tab2
+        "z_min": st.session_state.get("z_min", -100), #tab2
+        "z_max": st.session_state.get("z_max", 100), #tab2
+        "z_dotsize": st.session_state.get("z_dotsize", 50), #tab2
+        "c_figwidth": st.session_state.get("c_figwidth", 6.0), #tab3
+        "c_barwidth": st.session_state.get("c_barwidth", 0.8), #tab3
+        "gmm_binwidth": st.session_state.get("gmm_binwidth", 10), #tab4
+        "gmm_maxpops": st.session_state.get("gmm_maxpops", 4), #tab4
+        "gmm_xmax": st.session_state.get("gmm_xmax", 500), #tab4
+        "tab5_color_override": st.session_state.get("tab5_color_override", False), #tab5
+        "tab6_color_override": st.session_state.get("tab6_color_override", False), #tab5
+        "t6_bin": st.session_state.get("t6_bin", 25), #tab5
     }
     
     st.download_button(
@@ -894,7 +909,7 @@ else:
                 if show_marginal:
                     bubble_mode = st.checkbox("Bubble Chart (3rd Variable)", value=False)
                     if not bubble_mode:
-                        scatter_dot_size = st.slider("Scatter Dot Size", min_value=5, max_value=200, value=50, step=5)
+                        scatter_dot_size = st.slider("Scatter Dot Size", min_value=5, max_value=200, value=50, step=5, key="z_dotsize")
                     else:
                         scatter_dot_size = 50 
                 
@@ -1166,8 +1181,8 @@ else:
             
             col_c1, col_c2 = st.columns([1, 3])
             with col_c1:
-                fig_width = st.slider("Figure Width", min_value=3.0, max_value=15.0, value=6.0, step=0.5, help="Reduce this value to make the graph squarer when you have very few samples.")
-                bar_width = st.slider("Bar/Box Width", min_value=0.1, max_value=1.0, value=0.8, step=0.1, help="Adjust the thickness of the individual bars or boxes.")
+                fig_width = st.slider("Figure Width", min_value=3.0, max_value=15.0, value=6.0, step=0.5, key="c_figwidth", help="Reduce this value to make the graph squarer when you have very few samples.")
+                bar_width = st.slider("Bar/Box Width", min_value=0.1, max_value=1.0, value=0.8, step=0.1, key="c_barwidth", help="Adjust the thickness of the individual bars or boxes.")
                 st.markdown("---")
                 st.markdown("### 💧 Set Dilution Factors")
                 for ch in active_conc_channels:
@@ -1274,9 +1289,9 @@ else:
             
             col_set1, col_set2 = st.columns([1, 3])
             with col_set1:
-                max_pops = st.number_input("Max Populations to Test", 1, 6, 4)
-                gmm_bin_width = st.slider("GMM Histogram Bin Width (nm)", min_value=1, max_value=50, value=10, step=1)
-                gmm_x_max = st.number_input("GMM X-Axis Max", 100, 2000, 500)
+                max_pops = st.number_input("Max Populations to Test", 1, 6, 4, key="gmm_maxpops")
+                gmm_bin_width = st.slider("GMM Histogram Bin Width (nm)", min_value=1, max_value=50, value=10, step=1, key="gmm_binwidth")
+                gmm_x_max = st.number_input("GMM X-Axis Max", 100, 2000, 500, key="gmm_xmax")
                 run_gmm_btn = st.button("🚀 Run Population Analysis", use_container_width=True)
             
             if run_gmm_btn:
