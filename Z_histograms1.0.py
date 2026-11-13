@@ -670,10 +670,8 @@ else:
             with col1:
                 size_bin_width = st.slider("Size Bin Width (nm)", 1, 50, 10, key="s_bin")
                 max_x_size = st.number_input("Max X-Axis Limit (nm)", 100, 2000, 1000, key="s_max")
-                
                 log_x = st.checkbox("Logarithmic Scale", value=False, key="s_log_x", help="Applies a base-10 logarithmic scale to the size axis.")
                 
-                # --- NEW: ROI Gating Feature ---
                 st.markdown("---")
                 enable_roi = st.checkbox("🔬 Enable ROI Gating", help="Calculate number of particles for a specific size range.")
                 if enable_roi:
@@ -683,16 +681,9 @@ else:
                     with roi_col2:
                         roi_max = st.number_input("ROI Max (nm)", min_value=0, max_value=int(max_x_size), value=150, step=1)
                     
-                    # Safety check in case a user accidentally types a Min that is higher than the Max
                     if roi_min > roi_max:
                         roi_min, roi_max = roi_max, roi_min
                 st.markdown("---")
-                
-                has_replicates = any(len([i for i in items if i['active']]) > 1 for items in processed_data['Size'].values())
-                rep_mode = "Treat Independent"
-                if has_replicates:
-                    st.info("Multiple active samples detected in the same channel.")
-                    rep_mode = st.radio("Multi-Sample Handling:", ["Treat Independent", "Pool Data"], key="s_repmode")
             
             with col2:
                 bins = np.arange(0, max_x_size + size_bin_width, size_bin_width)
@@ -706,17 +697,12 @@ else:
                     active_items = [i for i in processed_data['Size'][ch] if i['active']]
                     if not active_items: continue
                     
-                    if rep_mode == "Pool Data":
-                        combined_df = pd.concat([i['df'] for i in active_items], ignore_index=True)
-                        f_col = find_data_column(combined_df, ['particle size', 'size', 'diameter'])
+                    for idx, item in enumerate(active_items):
+                        f_col = find_data_column(item['df'], ['particle size', 'size', 'diameter'])
+                        style = '-' if force_solid else line_styles[idx % len(line_styles)]
                         if f_col:
-                            entities.append({"label": f"{ch} (Pooled)", "data": combined_df[f_col].dropna(), "color": active_items[0]['color'], "style": '-'})
-                    else:
-                        for idx, item in enumerate(active_items):
-                            f_col = find_data_column(item['df'], ['particle size', 'size', 'diameter'])
-                            style = '-' if force_solid else line_styles[idx % len(line_styles)]
-                            if f_col:
-                                entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "color": item['color'], "style": style})
+                            # Pass the full DataFrame down so the graphing functions can access the Weight column
+                            entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "full_df": item['df'], "f_col": f_col, "color": item['color'], "style": style})
 
                 if entities and palette_choice != "Custom (Sample Colors)":
                     palette_name = PALETTES[palette_choice]
@@ -745,11 +731,9 @@ else:
                         if log_x: ax.set_xscale('log')
                         
                         for ent in entities:
-                            tmp_df = pd.DataFrame({'val': ent['data']})
-                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax, ent['full_df'], ent['f_col'], bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                         
-                        # --- NEW: Draw ROI Gate ---
                         if enable_roi:
                             ax.axvspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
                             ax.axvline(roi_min, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
@@ -766,18 +750,20 @@ else:
                         fig, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
                         fig.patch.set_facecolor(bg_color)
                         
-                        # --- FIXED: Calculate True Global Max Y (Curve + Bars) ---
                         global_max_y = 0
                         if facet_share_y:
                             for ent in entities:
-                                clean_data = ent['data'].dropna()
+                                clean_data = ent['data']
+                                w = ent['full_df']['Weight'] if 'Weight' in ent['full_df'].columns else None
+                                
                                 if len(clean_data) > 1:
-                                    counts, _ = np.histogram(clean_data, bins=bins)
+                                    counts, _ = np.histogram(clean_data, bins=bins, weights=w)
                                     bar_max = max(counts)
                                     
                                     curve_max = 0
                                     if use_kde:
-                                        curve_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * size_bin_width)
+                                        total_w = w.sum() if w is not None else len(clean_data)
+                                        curve_max = max(gaussian_kde(clean_data, weights=w)(x_vals) * total_w * size_bin_width)
                                         
                                     global_max_y = max(global_max_y, bar_max, curve_max)
                         
@@ -785,11 +771,9 @@ else:
                             ax = axes[i // cols, i % cols]
                             if log_x: ax.set_xscale('log')
                                 
-                            tmp_df = pd.DataFrame({'val': ent['data']})
-                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax, ent['full_df'], ent['f_col'], bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             
-                            # Draw ROI Gate
                             if enable_roi:
                                 ax.axvspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
                                 ax.axvline(roi_min, color='gray', linestyle='--', alpha=0.7)
@@ -797,10 +781,9 @@ else:
                                 
                             apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # --- NEW: Forcefully Apply the Global Max Y ---
                             if facet_share_y and global_max_y > 0:
                                 ax.set_ylim(0, global_max_y * 1.05)
-                            
+                        
                         for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
                         st.pyplot(fig)
@@ -816,13 +799,16 @@ else:
                         max_h = 0
                         poly_data = []
                         for ent in entities:
-                            clean_data = ent['data'].dropna()
+                            clean_data = ent['data']
+                            w = ent['full_df']['Weight'] if 'Weight' in ent['full_df'].columns else None
+                            
                             if len(clean_data) > 1:
                                 if use_kde:
-                                    y_line = gaussian_kde(clean_data)(x_vals) * len(clean_data) * size_bin_width
+                                    total_w = w.sum() if w is not None else len(clean_data)
+                                    y_line = gaussian_kde(clean_data, weights=w)(x_vals) * total_w * size_bin_width
                                     x_line = x_vals
                                 else:
-                                    counts, edges = np.histogram(clean_data, bins=bins)
+                                    counts, edges = np.histogram(clean_data, bins=bins, weights=w)
                                     centers = edges[:-1] + (size_bin_width / 2)
                                     x_line = np.concatenate(([0], centers, [edges[-1] + (size_bin_width / 2)]))
                                     y_line = np.concatenate(([0], counts, [0]))
@@ -847,7 +833,6 @@ else:
                             y_ticks.append(current_offset)
                             y_labels.append(ent['label'])
                             
-                        # --- NEW: Draw ROI Gate ---
                         if enable_roi:
                             ax.axvspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
                             ax.axvline(roi_min, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
@@ -880,7 +865,6 @@ else:
                             palette=palette_dict, inner=inner_style, linewidth=line_width, ax=ax
                         )
                         
-                        # --- NEW: Draw ROI Gate (Horizontal for Violin) ---
                         if enable_roi:
                             ax.axhspan(roi_min, roi_max, color='gray', alpha=0.15, zorder=0)
                             ax.axhline(roi_min, color='gray', linestyle='--', alpha=0.7, linewidth=1.5)
@@ -904,7 +888,6 @@ else:
                         st.pyplot(fig)
                         create_download_buttons(fig, "Size_Distribution_Violin")
 
-            # --- NEW: ROI Data Table ---
             if enable_roi and entities:
                 st.markdown("---")
                 st.subheader(f"🎯 Region of Interest (ROI) particles: {roi_min} nm - {roi_max} nm")
@@ -976,12 +959,6 @@ else:
                 min_x_zeta = st.number_input("Min X-Axis Limit (mV)", -200, 0, -100, key="z_min")
                 max_x_zeta = st.number_input("Max X-Axis Limit (mV)", 0, 200, 100, key="z_max")
                 
-                has_replicates_zeta = any(len([i for i in items if i['active']]) > 1 for items in processed_data['Zeta_Potential'].values())
-                rep_mode_zeta = "Treat Independent"
-                if has_replicates_zeta:
-                    st.info("Multiple active samples detected in the same channel.")
-                    rep_mode_zeta = st.radio("Multi-Sample Handling:", ["Treat Independent", "Pool Data"], key="z_repmode")
-                    
                 st.markdown("---")
                 show_marginal = st.checkbox("Show Size vs. Zeta Scatter Plot (Marginal Distributions)", value=False)
                 if show_marginal:
@@ -1001,17 +978,12 @@ else:
                     active_items = [i for i in processed_data['Zeta_Potential'][ch] if i['active']]
                     if not active_items: continue
                     
-                    if rep_mode_zeta == "Pool Data":
-                        combined_df = pd.concat([i['df'] for i in active_items], ignore_index=True)
-                        f_col = find_data_column(combined_df, ['zeta potential'])
+                    for idx, item in enumerate(active_items):
+                        f_col = find_data_column(item['df'], ['zeta potential'])
+                        style = '-' if force_solid else line_styles[idx % len(line_styles)]
                         if f_col:
-                            z_entities.append({"label": f"{ch} (Pooled)", "data": combined_df[f_col].dropna(), "df": combined_df, "color": active_items[0]['color'], "style": '-'})
-                    else:
-                        for idx, item in enumerate(active_items):
-                            f_col = find_data_column(item['df'], ['zeta potential'])
-                            style = '-' if force_solid else line_styles[idx % len(line_styles)]
-                            if f_col:
-                                z_entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "df": item['df'], "color": item['color'], "style": style})
+                            # Pass the full_df so the Weight column reaches the plotting functions
+                            z_entities.append({"label": item['label'], "data": item['df'][f_col].dropna(), "full_df": item['df'], "f_col": f_col, "color": item['color'], "style": style})
 
                 if z_entities and palette_choice != "Custom (Sample Colors)":
                     palette_name = PALETTES[palette_choice]
@@ -1037,8 +1009,7 @@ else:
                         fig_zeta, ax_zeta = plt.subplots(figsize=(10, 5))
                         fig_zeta.patch.set_facecolor(bg_color)
                         for ent in z_entities:
-                            tmp_df = pd.DataFrame({'val': ent['data']})
-                            plot_custom_distribution(ax_zeta, tmp_df, 'val', bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax_zeta, ent['full_df'], ent['f_col'], bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax_zeta, ent['data'], ent['color'], central_marker)
                         apply_custom_style(ax_zeta, "Zeta Potential Distribution", "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=show_legend)
                         st.pyplot(fig_zeta)
@@ -1051,36 +1022,33 @@ else:
                         fig, axes = plt.subplots(rows, cols, figsize=(10, max(4, rows * 3.5)), squeeze=False, sharey=facet_share_y)
                         fig.patch.set_facecolor(bg_color)
                         
-                        # --- FIXED: Calculate True Global Max Y (Curve + Bars) ---
                         global_max_y = 0
                         if facet_share_y:
                             for ent in z_entities:
                                 clean_data = ent['data'].dropna()
+                                w = ent['full_df']['Weight'] if 'Weight' in ent['full_df'].columns else None
                                 if len(clean_data) > 1:
-                                    # Use 'bins' instead of 'z_bins'
-                                    counts, _ = np.histogram(clean_data, bins=bins)
+                                    counts, _ = np.histogram(clean_data, bins=bins, weights=w)
                                     bar_max = max(counts)
                                     
                                     curve_max = 0
-                                    if use_kde:
-                                        # Use 'x_vals' instead of 'z_x_vals'
-                                        curve_max = max(gaussian_kde(clean_data)(x_vals) * len(clean_data) * zeta_bin_width)
+                                    if globals().get('use_kde', False):
+                                        total_w = w.sum() if w is not None else len(clean_data)
+                                        curve_max = max(gaussian_kde(clean_data, weights=w)(x_vals) * total_w * zeta_bin_width)
                                         
                                     global_max_y = max(global_max_y, bar_max, curve_max)
                         
                         for i, ent in enumerate(z_entities):
                             ax = axes[i // cols, i % cols]
                                 
-                            tmp_df = pd.DataFrame({'val': ent['data']})
-                            plot_custom_distribution(ax, tmp_df, 'val', bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax, ent['full_df'], ent['f_col'], bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             
                             apply_custom_style(ax, ent['label'], "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=False)
                             
-                            # --- NEW: Forcefully Apply the Global Max Y ---
                             if facet_share_y and global_max_y > 0:
                                 ax.set_ylim(0, global_max_y * 1.05)
-                            
+                        
                         for j in range(len(z_entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
                         st.pyplot(fig)
@@ -1095,14 +1063,14 @@ else:
                         poly_data = []
                         for ent in z_entities:
                             clean_data = ent['data'].dropna()
+                            w = ent['full_df']['Weight'] if 'Weight' in ent['full_df'].columns else None
                             if len(clean_data) > 1:
                                 if globals().get('use_kde', False):
-                                    # 1. Smooth KDE Math
-                                    y_line = gaussian_kde(clean_data)(x_vals) * len(clean_data) * zeta_bin_width
+                                    total_w = w.sum() if w is not None else len(clean_data)
+                                    y_line = gaussian_kde(clean_data, weights=w)(x_vals) * total_w * zeta_bin_width
                                     x_line = x_vals
                                 else:
-                                    # 2. Strict Polygon Math
-                                    counts, edges = np.histogram(clean_data, bins=bins)
+                                    counts, edges = np.histogram(clean_data, bins=bins, weights=w)
                                     centers = edges[:-1] + (zeta_bin_width / 2)
                                     x_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
                                     y_line = np.concatenate(([0], counts, [0]))
@@ -1139,7 +1107,7 @@ else:
                     palette_dict = {}
                     
                     for ent in z_entities:
-                        temp_df = ent['df'].copy()
+                        temp_df = ent['full_df'].copy()
                         temp_df['Sample'] = ent['label']
                         palette_dict[ent['label']] = ent['color']
                         combined_marg_df = pd.concat([combined_marg_df, temp_df], ignore_index=True)
@@ -1148,10 +1116,8 @@ else:
                     z_col = find_data_column(combined_marg_df, ['zeta potential'])
                     
                     if s_col and z_col:
-                        # 1. Build the Blank JointGrid Base
                         jg = sns.JointGrid(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict)
                         
-                        # 2. Draw the Scatter Plot (Joint)
                         if bubble_mode:
                             numeric_cols = combined_marg_df.select_dtypes(include=[np.number]).columns.tolist()
                             valid_bubble_cols = [c for c in numeric_cols if c.lower() not in [s_col.lower(), z_col.lower(), 'channel']]
@@ -1165,13 +1131,15 @@ else:
                         else:
                             sns.scatterplot(data=combined_marg_df, x=s_col, y=z_col, hue='Sample', palette=palette_dict, s=scatter_dot_size, alpha=0.6, ax=jg.ax_joint)
                             
-                        # 3. Draw the Marginals (Dynamically switch between KDE and Polygons!)
+                        # Extract weights for the marginal KDEs
+                        w_marg = combined_marg_df['Weight'] if 'Weight' in combined_marg_df.columns else None
+                        
                         if globals().get('use_kde', False):
-                            sns.kdeplot(data=combined_marg_df, x=s_col, hue='Sample', palette=palette_dict, fill=True, alpha=0.3, ax=jg.ax_marg_x, legend=False, linewidth=line_width)
-                            sns.kdeplot(data=combined_marg_df, y=z_col, hue='Sample', palette=palette_dict, fill=True, alpha=0.3, ax=jg.ax_marg_y, legend=False, linewidth=line_width)
+                            sns.kdeplot(data=combined_marg_df, x=s_col, hue='Sample', weights=w_marg, palette=palette_dict, fill=True, alpha=0.3, ax=jg.ax_marg_x, legend=False, linewidth=line_width)
+                            sns.kdeplot(data=combined_marg_df, y=z_col, hue='Sample', weights=w_marg, palette=palette_dict, fill=True, alpha=0.3, ax=jg.ax_marg_y, legend=False, linewidth=line_width)
                         else:
-                            sns.histplot(data=combined_marg_df, x=s_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_x, legend=False, linewidth=line_width)
-                            sns.histplot(data=combined_marg_df, y=z_col, hue='Sample', palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_y, legend=False, linewidth=line_width)
+                            sns.histplot(data=combined_marg_df, x=s_col, hue='Sample', weights=w_marg, palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_x, legend=False, linewidth=line_width)
+                            sns.histplot(data=combined_marg_df, y=z_col, hue='Sample', weights=w_marg, palette=palette_dict, element="poly", fill=True, alpha=0.3, ax=jg.ax_marg_y, legend=False, linewidth=line_width)
                         
                         jg.fig.patch.set_facecolor(bg_color)
                         jg.ax_joint.set_facecolor(bg_color)
@@ -1194,14 +1162,11 @@ else:
                                 
                         if show_grid: jg.ax_joint.grid(True, linestyle='--', linewidth=0.5, alpha=0.3, color=axes_color)
                         
-                        # --- 4. FIXED LEGEND POSITIONING ---
                         if show_legend and jg.ax_joint.get_legend():
-                            # Extract the raw legend data
                             handles, labels = jg.ax_joint.get_legend_handles_labels()
                             existing_leg = jg.ax_joint.get_legend()
                             leg_title = existing_leg.get_title().get_text() if existing_leg.get_title() else "Sample"
                             
-                            # Rebuild the legend exactly where the user asked for it
                             leg = jg.ax_joint.legend(handles=handles, labels=labels, loc=legend_position, fontsize=legend_size, title=leg_title)
                             
                             for text in leg.get_texts(): 
@@ -1225,7 +1190,6 @@ else:
             st.markdown("---")
             st.subheader("📊 Statistical Comparison (Zeta Potential)")
             if z_entities:
-                # FIXED: Added the stable calculate_stable_mode to the statistics dataframe!
                 summary_list = [{"Sample": ent["label"], "Count": len(ent["data"]), "Mean (mV)": round(ent["data"].mean(), 1), "Mode (mV)": calculate_stable_mode(ent["data"]), "SD (mV)": round(ent["data"].std(), 1)} for ent in z_entities]
                 st.dataframe(pd.DataFrame(summary_list), use_container_width=True)
                 
