@@ -14,27 +14,17 @@ from sklearn.mixture import GaussianMixture
 from scipy.stats import gaussian_kde, mannwhitneyu, wasserstein_distance, anderson_ksamp
 
 
-def calculate_stable_mode(size_array):
-    """Calculates a high-resolution, mathematically stable peak (mode) independent of visual bin size."""
-    # Force data to be strictly numeric (fixes the "object array" error)
-    clean_data = pd.to_numeric(size_array, errors='coerce').dropna()
+def calculate_stable_mode(series):
+    # Force data to be strictly numeric (fixes "object array" errors)
+    clean_data = pd.to_numeric(series, errors='coerce').dropna()
     
     # FAILSAFE: Skip KDE math if there are fewer than 2 particles or 0 variance
-    if len(clean_data) < 2 or clean_data.std() == 0:
+    if len(clean_data) < 2 or clean_data.std() == 0: 
         return np.nan
         
-    # Create a mathematical density curve of the raw data
     kde = gaussian_kde(clean_data)
-    
-    # Create a fine, 1-nm resolution grid covering the data's range
-    x_grid = np.linspace(clean_data.min(), clean_data.max(), 1000)
-    
-    # Evaluate the curve and find the exact peak
-    kde_values = kde.evaluate(x_grid)
-    peak_index = np.argmax(kde_values)
-    
-    # Return the exact x-value of that peak with 1 decimal place
-    return round(x_grid[peak_index], 1)
+    x_vals = np.linspace(clean_data.min(), clean_data.max(), 1000)
+    return x_vals[np.argmax(kde(x_vals))]
 
 
 # --- Configuration & Styling ---
@@ -320,16 +310,16 @@ def get_mode_from_kde(series):
     return x_vals[np.argmax(kde(x_vals))]
 
 def get_span(series):
-    data = series.dropna()
-    if len(data) < 2: return np.nan
-    d10, d50, d90 = np.percentile(data, [10, 50, 90])
+    clean_data = pd.to_numeric(series, errors='coerce').dropna()
+    if len(clean_data) < 2: return np.nan
+    d10, d50, d90 = np.percentile(clean_data, [10, 50, 90])
     return (d90 - d10) / d50 if d50 > 0 else np.nan
 
 def get_fwhm_from_kde(series):
-    data = series.dropna()
-    if len(data) < 2 or data.std() == 0: return np.nan
-    kde = gaussian_kde(data)
-    x_vals = np.linspace(data.min(), data.max(), 1000)
+    clean_data = pd.to_numeric(series, errors='coerce').dropna()
+    if len(clean_data) < 2 or clean_data.std() == 0: return np.nan
+    kde = gaussian_kde(clean_data)
+    x_vals = np.linspace(clean_data.min(), clean_data.max(), 1000)
     y_vals = kde(x_vals)
     max_idx = np.argmax(y_vals)
     half_max = np.max(y_vals) / 2.0
@@ -339,27 +329,30 @@ def get_fwhm_from_kde(series):
     return right_half - left_half
 
 def get_mad(series):
-    data = series.dropna()
-    if len(data) < 2: return np.nan
-    med = np.median(data)
-    return np.median(np.abs(data - med))
+    clean_data = pd.to_numeric(series, errors='coerce').dropna()
+    if len(clean_data) < 2: return np.nan
+    med = np.median(clean_data)
+    return np.median(np.abs(clean_data - med))
 
 def run_stats_comparisons(data_a, data_b):
     results = {}
-    if len(data_a) == 0 or len(data_b) == 0: return results
+    clean_a = pd.to_numeric(data_a, errors='coerce').dropna()
+    clean_b = pd.to_numeric(data_b, errors='coerce').dropna()
+    
+    if len(clean_a) < 2 or len(clean_b) < 2: return results
     
     # 1. Mann-Whitney U
-    _, p_val = mannwhitneyu(data_a, data_b, alternative='two-sided')
+    _, p_val = mannwhitneyu(clean_a, clean_b, alternative='two-sided')
     results["MW p-value"] = "< 0.001" if p_val < 0.001 else f"{p_val:.3f}"
     
     # 2. Earth Mover's Distance (EMD)
-    results["EMD Score"] = f"{wasserstein_distance(data_a, data_b):.2f}"
+    results["EMD Score"] = f"{wasserstein_distance(clean_a, clean_b):.2f}"
     
     # 3. Anderson-Darling
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            ad_p = anderson_ksamp([data_a, data_b]).pvalue
+            ad_p = anderson_ksamp([clean_a, clean_b]).pvalue
             results["AD p-value"] = "< 0.001" if ad_p <= 0.001 else ("> 0.250" if ad_p >= 0.25 else f"{ad_p:.3f}")
     except Exception:
         results["AD p-value"] = "Error"
@@ -414,28 +407,36 @@ def apply_custom_style(ax, title, xlabel, ylabel, xlim, bg, fg, grid, draw_legen
             ax.get_legend().remove()
 
 def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, color, style, line_width, label, display_style):
-    # Safely drop missing values so our particle sizes and our weights stay perfectly aligned
-    df_clean = data.dropna(subset=[feature_col])
-    x_data = df_clean[feature_col]
-    if len(x_data) == 0: return
+    # Force data to be strictly numeric and perfectly align it
+    df_clean = data.copy()
+    df_clean[feature_col] = pd.to_numeric(df_clean[feature_col], errors='coerce')
+    df_clean = df_clean.dropna(subset=[feature_col])
     
-    # Grab the weights (will be 0.33 for averaged replicates, or 1.0 for everything else)
-    w = df_clean['Weight'] if 'Weight' in df_clean.columns else None
+    x_data = df_clean[feature_col].values
     
-    # Apply weights to the raw bin counts
+    # FAILSAFE: Skip drawing curves for files with 0 or 1 particle
+    if len(x_data) < 2: return
+    
+    # Extract and securely format the weights
+    w = None
+    if 'Weight' in df_clean.columns:
+        df_clean['Weight'] = pd.to_numeric(df_clean['Weight'], errors='coerce').fillna(1.0)
+        w = df_clean['Weight'].values
+        
     counts, edges = np.histogram(x_data, bins=bins, weights=w)
     
     hist_lbl = label if display_style == "Histogram Only" else None
     curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
-    # Draw Bars (Matplotlib natively scales the Y-axis if weights are provided)
+    # Draw Bars 
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
         ax.hist(x_data, bins=bins, weights=w, histtype='step', color=color, linewidth=line_width, linestyle=style, label=hist_lbl)
         ax.hist(x_data, bins=bins, weights=w, histtype='stepfilled', color=color, alpha=0.2, linewidth=0)
         
     # Draw Lines
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-        if globals().get('use_kde', False) and len(x_data) > 1:
+        # Only use KDE if variance allows it
+        if globals().get('use_kde', False) and np.std(x_data) > 0:
             # SciPy KDE scaling with weights
             kde = gaussian_kde(x_data, weights=w)
             total_weight = w.sum() if w is not None else len(x_data)
