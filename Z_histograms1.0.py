@@ -548,40 +548,86 @@ else:
         )
         st.markdown("---")
 
-    # --- Standard Processing Loop ---
-    for item in files_to_process:
-        f_obj = item['file_obj']
-        f_obj.seek(0)
+    # --- Standard Processing Loop (Upgraded for Replicates) ---
+    for group_key, items_list in replicate_map.items():
+        measurement, channel, identifier = group_key
         
-        measurement, channel = parse_file_info(f_obj)
-        df = extract_dataframe(item['filename'], f_obj)
-
-        # --- NEW: Extract exact machine concentration ---
-        f_obj.seek(0) # Reset pointer again for the second read
-        true_conc = extract_true_concentration(item['filename'], f_obj)
-        
-        if df is not None:
-            if channel not in processed_data.get(measurement, {}): 
-                processed_data[measurement][channel] = []
+        # Grab the standard color for this channel
+        default_color = '#000000'
+        for raw_code, (name, hex_code) in DEFAULT_CHANNELS.items():
+            if name == channel: default_color = hex_code
+            
+        if channel not in processed_data.get(measurement, {}): 
+            processed_data[measurement][channel] = []
+            
+        # --- PATH A: No Replicates OR User Chose "Separate" ---
+        if len(items_list) == 1 or replicate_strategy == "Treat as Separate (Auto-number)":
+            for idx, item in enumerate(items_list):
+                f_obj = item['file_obj']
+                f_obj.seek(0)
+                df = extract_dataframe(item['filename'], f_obj)
+                f_obj.seek(0)
+                true_conc = extract_true_concentration(item['filename'], f_obj)
                 
-            default_color = '#000000'
-            for raw_code, (name, hex_code) in DEFAULT_CHANNELS.items():
-                if name == channel: default_color = hex_code
+                if df is not None:
+                    if item['custom_name']:
+                        base_name = item['custom_name']
+                        label = f"{channel} - {base_name} (Rep {idx+1})" if len(items_list) > 1 else f"{channel} - {base_name}"
+                    else:
+                        base_name = f"Sample {len(processed_data[measurement][channel]) + 1}"
+                        label = f"{channel} ({base_name} - Rep {idx+1})" if len(items_list) > 1 else f"{channel} ({base_name})"
+                        
+                    processed_data[measurement][channel].append({
+                        'filename': item['filename'], 
+                        'df': df, 
+                        'label': label,
+                        'color': default_color, 
+                        'active': True, 
+                        'dilution': item.get('custom_dilution', 1.0),
+                        'true_concentration': true_conc
+                    })
+                    
+        # --- PATH B: User Chose "Sum" or "Average" ---
+        else:
+            dfs, true_concs = [], []
+            
+            # Extract all replicates simultaneously
+            for item in items_list:
+                f_obj = item['file_obj']
+                f_obj.seek(0)
+                df = extract_dataframe(item['filename'], f_obj)
+                f_obj.seek(0)
+                tc = extract_true_concentration(item['filename'], f_obj)
                 
-            if item['custom_name']:
-                final_label = f"{channel} - {item['custom_name']}"
-            else:
-                final_label = f"{channel} (Sample {len(processed_data[measurement][channel]) + 1})"
+                if df is not None: dfs.append(df)
+                if tc is not None: true_concs.append(tc)
                 
-            processed_data[measurement][channel].append({
-                'filename': item['filename'], 
-                'df': df, 
-                'label': final_label,
-                'color': default_color, 
-                'active': True, 
-                'dilution': item['custom_dilution'], # <-- Dilution automatically applies here!
-                'true_concentration': true_conc
-            })
+            if dfs:
+                # Physically merge all replicate CSV rows into one massive distribution
+                pooled_df = pd.concat(dfs, ignore_index=True)
+                
+                if items_list[0]['custom_name']:
+                    label = f"{channel} - {items_list[0]['custom_name']} (Pooled)"
+                else:
+                    label = f"{channel} (Sample {len(processed_data[measurement][channel]) + 1} - Pooled)"
+                
+                # Apply the concentration math strategy
+                final_tc = None
+                if true_concs:
+                    if replicate_strategy == "Average Data (Preserve Scale)":
+                        final_tc = sum(true_concs) / len(true_concs)
+                    else:
+                        final_tc = sum(true_concs)
+                
+                processed_data[measurement][channel].append({
+                    'filename': items_list[0]['filename'], # Use the first file's name as a master reference
+                    'df': pooled_df, 
+                    'label': label,
+                    'color': default_color, 
+                    'active': True, 
+                    'dilution': items_list[0].get('custom_dilution', 1.0),
+                    'true_concentration': final_tc
+                })
 
     with st.expander("🎨 Customize Individual Samples (Labels & Colors)", expanded=True):
         st.markdown("Toggle specific files on/off, rename them, and assign unique colors.")
