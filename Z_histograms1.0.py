@@ -16,9 +16,12 @@ from scipy.stats import gaussian_kde, mannwhitneyu, wasserstein_distance, anders
 
 def calculate_stable_mode(size_array):
     """Calculates a high-resolution, mathematically stable peak (mode) independent of visual bin size."""
-    clean_data = size_array.dropna()
-    if len(clean_data) == 0:
-        return 0
+    # Force data to be strictly numeric (fixes the "object array" error)
+    clean_data = pd.to_numeric(size_array, errors='coerce').dropna()
+    
+    # FAILSAFE: Skip KDE math if there are fewer than 2 particles or 0 variance
+    if len(clean_data) < 2 or clean_data.std() == 0:
+        return np.nan
         
     # Create a mathematical density curve of the raw data
     kde = gaussian_kde(clean_data)
