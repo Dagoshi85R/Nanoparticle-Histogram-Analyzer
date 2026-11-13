@@ -75,24 +75,7 @@ with st.sidebar:
     st.header("1. Upload Data")
     uploaded_files = st.file_uploader("Drag & Drop ZetaSphere .zip files (Multiple Samples Supported)", type=["zip"], accept_multiple_files=True)
     
-    # --- FIXED: LOAD SETTINGS ---
-    st.header("2. Save & Load Settings")
-    uploaded_settings = st.file_uploader("Upload a saved settings file (.json)", type=["json"])
-    if uploaded_settings is not None:
-        # Prevent infinite reload loops by checking if we just loaded this file
-        if st.session_state.get("last_loaded_file") != uploaded_settings.name:
-            try:
-                saved_prefs = json.load(uploaded_settings)
-                for k, v in saved_prefs.items():
-                    st.session_state[k] = v
-                
-                # Remember that we loaded this file and force a UI refresh
-                st.session_state["last_loaded_file"] = uploaded_settings.name
-                st.rerun() 
-            except Exception:
-                st.error("Invalid settings file.")
-
-    st.header("3. Display Customization")
+    st.header("2. Display Customization")
     
     # --- FIXED: Using key= binds the widgets directly to the memory ---
     force_solid = st.checkbox("Force Solid Lines (Disable Dashes)", key="saved_force_solid")
@@ -178,9 +161,27 @@ with st.sidebar:
         "gmm_maxpops": st.session_state.get("gmm_maxpops", 4), #tab4
         "gmm_xmax": st.session_state.get("gmm_xmax", 500), #tab4
         "tab5_color_override": st.session_state.get("tab5_color_override", False), #tab5
-        "t6_bin": st.session_state.get("t6_bin", 25), #tab5
+        "tab6_color_override": st.session_state.get("tab6_color_override", False), #tab6
+        "t6_bin": st.session_state.get("t6_bin", 25) #tab6
     }
     
+        # --- FIXED: LOAD SETTINGS ---
+    st.header("3. Save & Load Settings")
+    uploaded_settings = st.file_uploader("Upload a saved settings file (.json)", type=["json"])
+    if uploaded_settings is not None:
+        # Prevent infinite reload loops by checking if we just loaded this file
+        if st.session_state.get("last_loaded_file") != uploaded_settings.name:
+            try:
+                saved_prefs = json.load(uploaded_settings)
+                for k, v in saved_prefs.items():
+                    st.session_state[k] = v
+                
+                # Remember that we loaded this file and force a UI refresh
+                st.session_state["last_loaded_file"] = uploaded_settings.name
+                st.rerun() 
+            except Exception:
+                st.error("Invalid settings file.")
+                
     st.download_button(
         label="📥 Download Current Settings",
         data=json.dumps(current_settings, indent=4),
