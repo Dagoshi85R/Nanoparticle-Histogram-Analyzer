@@ -185,7 +185,6 @@ with st.sidebar:
         "gmm_maxpops": st.session_state.get("gmm_maxpops", 4), #tab4
         "gmm_xmax": st.session_state.get("gmm_xmax", 500), #tab4
         "tab5_color_override": st.session_state.get("tab5_color_override", False), #tab5
-        "tab6_color_override": st.session_state.get("tab6_color_override", False), #tab5
         "t6_bin": st.session_state.get("t6_bin", 25), #tab5
     }
     
@@ -522,6 +521,32 @@ else:
                     })
         except Exception:
             pass
+
+    # --- NEW: REPLICATE DETECTOR & DYNAMIC UI ---
+    replicate_map = {}
+    for item in files_to_process:
+        item['file_obj'].seek(0)
+        measurement, channel = parse_file_info(item['file_obj'])
+        # Identify by the Master Zip folder name, or fallback to the file name
+        identifier = item['custom_name'] if item['custom_name'] else item['filename']
+        
+        group_key = (measurement, channel, identifier)
+        if group_key not in replicate_map:
+            replicate_map[group_key] = []
+        replicate_map[group_key].append(item)
+
+    # Check if any group has more than 1 file
+    has_replicates = any(len(group) > 1 for group in replicate_map.values())
+
+    replicate_strategy = "Treat as Separate"
+    if has_replicates:
+        st.info("🔄 **Technical Replicates Detected!** Multiple files share the exact same sample name.")
+        replicate_strategy = st.radio(
+            "How would you like to handle these replicates?", 
+            ["Treat as Separate (Auto-number)", "Sum (Pool) Data", "Average Data (Preserve Scale)"],
+            key="rep_strategy"
+        )
+        st.markdown("---")
 
     # --- Standard Processing Loop ---
     for item in files_to_process:
