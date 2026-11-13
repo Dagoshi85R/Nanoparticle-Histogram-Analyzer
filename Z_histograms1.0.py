@@ -411,28 +411,29 @@ def apply_custom_style(ax, title, xlabel, ylabel, xlim, bg, fg, grid, draw_legen
             ax.get_legend().remove()
 
 def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, color, style, line_width, label, display_style):
-    x_data = data[feature_col].dropna()
+    # Safely drop missing values so our particle sizes and our weights stay perfectly aligned
+    df_clean = data.dropna(subset=[feature_col])
+    x_data = df_clean[feature_col]
     if len(x_data) == 0: return
     
-    # --- NEW: Check for weights (for accurate Averaging) ---
-    w = data['Weight'].dropna() if 'Weight' in data.columns else None
+    # Grab the weights (will be 0.33 for averaged replicates, or 1.0 for everything else)
+    w = df_clean['Weight'] if 'Weight' in df_clean.columns else None
     
+    # Apply weights to the raw bin counts
     counts, edges = np.histogram(x_data, bins=bins, weights=w)
     
     hist_lbl = label if display_style == "Histogram Only" else None
     curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
-    # Draw Bars 
+    # Draw Bars (Matplotlib natively scales the Y-axis if weights are provided)
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
         ax.hist(x_data, bins=bins, weights=w, histtype='step', color=color, linewidth=line_width, linestyle=style, label=hist_lbl)
         ax.hist(x_data, bins=bins, weights=w, histtype='stepfilled', color=color, alpha=0.2, linewidth=0)
         
     # Draw Lines
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-        # --- Dynamic Toggle between KDE and Polygons ---
         if globals().get('use_kde', False) and len(x_data) > 1:
-            # SciPy's KDE can natively accept weights for averaging.
-            # 1. Smooth KDE Math
+            # SciPy KDE scaling with weights
             kde = gaussian_kde(x_data, weights=w)
             total_weight = w.sum() if w is not None else len(x_data)
             y_smooth = kde(x_vals) * total_weight * bin_width
@@ -440,7 +441,7 @@ def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, col
             if display_style == "Smooth Curve Only":
                 ax.fill_between(x_vals, 0, y_smooth, color=color, alpha=0.1)
         else:
-            # 2. Strict ZetaSphere Polygon Math
+            # Polygon scaling using the weighted counts
             centers = edges[:-1] + (bin_width / 2)
             centers_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
             counts_line = np.concatenate(([0], counts, [0]))
@@ -641,7 +642,9 @@ else:
             for ch, items in channels.items():
                 for idx, item in enumerate(items):
                     with cols[col_idx % 3]:
-                        safe_name = item['filename'].replace('.', '_').replace(' ', '_') + f"_{meas}_{idx}"
+                        # By adding the strategy to the key, Streamlit forgets the old cached labels when you switch modes!
+                        strat_tag = replicate_strategy.split()[0]
+                        safe_name = item['filename'].replace('.', '_').replace(' ', '_') + f"_{meas}_{idx}_{strat_tag}"
                         st.markdown(f"**{meas}: {ch} (File {idx+1})**")
                         item['active'] = st.checkbox("Show Sample", value=item['active'], key=f"act_{safe_name}")
                         item['label'] = st.text_input("Label", value=item['label'], key=f"lbl_{safe_name}")
