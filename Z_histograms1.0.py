@@ -414,24 +414,28 @@ def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, col
     x_data = data[feature_col].dropna()
     if len(x_data) == 0: return
     
-    counts, edges = np.histogram(x_data, bins=bins)
+    # --- NEW: Check for weights (for accurate Averaging) ---
+    w = data['Weight'].dropna() if 'Weight' in data.columns else None
+    
+    counts, edges = np.histogram(x_data, bins=bins, weights=w)
     
     hist_lbl = label if display_style == "Histogram Only" else None
     curve_lbl = label if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"] else None
     
     # Draw Bars 
     if display_style in ["Histogram Only", "Both (Bar + Curve)"]:
-        ax.hist(x_data, bins=bins, histtype='step', color=color, linewidth=line_width, linestyle=style, label=hist_lbl)
-        ax.hist(x_data, bins=bins, histtype='stepfilled', color=color, alpha=0.2, linewidth=0)
+        ax.hist(x_data, bins=bins, weights=w, histtype='step', color=color, linewidth=line_width, linestyle=style, label=hist_lbl)
+        ax.hist(x_data, bins=bins, weights=w, histtype='stepfilled', color=color, alpha=0.2, linewidth=0)
         
     # Draw Lines
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-        
-        # --- NEW: Dynamic Toggle between KDE and Polygons ---
+        # --- Dynamic Toggle between KDE and Polygons ---
         if globals().get('use_kde', False) and len(x_data) > 1:
+            # SciPy's KDE can natively accept weights for averaging.
             # 1. Smooth KDE Math
-            kde = gaussian_kde(x_data)
-            y_smooth = kde(x_vals) * len(x_data) * bin_width
+            kde = gaussian_kde(x_data, weights=w)
+            total_weight = w.sum() if w is not None else len(x_data)
+            y_smooth = kde(x_vals) * total_weight * bin_width
             ax.plot(x_vals, y_smooth, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
             if display_style == "Smooth Curve Only":
                 ax.fill_between(x_vals, 0, y_smooth, color=color, alpha=0.1)
@@ -591,7 +595,6 @@ else:
         else:
             dfs, true_concs = [], []
             
-            # Extract all replicates simultaneously
             for item in items_list:
                 f_obj = item['file_obj']
                 f_obj.seek(0)
@@ -603,24 +606,25 @@ else:
                 if tc is not None: true_concs.append(tc)
                 
             if dfs:
-                # Physically merge all replicate CSV rows into one massive distribution
                 pooled_df = pd.concat(dfs, ignore_index=True)
                 
-                if items_list[0]['custom_name']:
-                    label = f"{channel} - {items_list[0]['custom_name']} (Pooled)"
+                # --- NEW: Apply exact Weights and strict Label Suffixes ---
+                if replicate_strategy == "Average Data (Preserve Scale)":
+                    pooled_df['Weight'] = 1.0 / len(dfs)
+                    suffix = "(Averaged)"
+                    final_tc = sum(true_concs) / len(true_concs) if true_concs else None
                 else:
-                    label = f"{channel} (Sample {len(processed_data[measurement][channel]) + 1} - Pooled)"
+                    pooled_df['Weight'] = 1.0
+                    suffix = "(Pooled)"
+                    final_tc = sum(true_concs) if true_concs else None
                 
-                # Apply the concentration math strategy
-                final_tc = None
-                if true_concs:
-                    if replicate_strategy == "Average Data (Preserve Scale)":
-                        final_tc = sum(true_concs) / len(true_concs)
-                    else:
-                        final_tc = sum(true_concs)
+                if items_list[0]['custom_name']:
+                    label = f"{channel} - {items_list[0]['custom_name']} {suffix}"
+                else:
+                    label = f"{channel} (Sample {len(processed_data[measurement][channel]) + 1} - {suffix})"
                 
                 processed_data[measurement][channel].append({
-                    'filename': items_list[0]['filename'], # Use the first file's name as a master reference
+                    'filename': items_list[0]['filename'], 
                     'df': pooled_df, 
                     'label': label,
                     'color': default_color, 
