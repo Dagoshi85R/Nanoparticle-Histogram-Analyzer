@@ -1313,7 +1313,7 @@ else:
                                 
                         active_palette = {hue: hex_colors[i] for i, hue in enumerate(unique_hues)}
                     
-                    if graph_type == "Bar Chart": sns.barplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, errorbar='sd', capsize=0.1, ax=ax_conc, edgecolor=axes_color, linewidth=line_width, width=bar_width)
+                    if graph_type == "Bar Chart": sns.barplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, errorbar='sd', capsize=0.1, err_kws={'linewidth': line_width, 'color': axes_color}, ax=ax_conc, edgecolor=axes_color, linewidth=line_width, width=bar_width)
                     elif graph_type == "Dot Plot (Strip)": sns.stripplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, dodge=True, size=8, ax=ax_conc, edgecolor=axes_color, linewidth=line_width/2)
                     elif graph_type == "Box Plot": sns.boxplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, ax=ax_conc, fliersize=5, linewidth=line_width, width=bar_width)
                     
