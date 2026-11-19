@@ -599,7 +599,7 @@ else:
                     
         # --- PATH B: User Chose "Sum" or "Average" ---
         else:
-            dfs, true_concs = [], []
+            dfs, true_concs, replicate_stats = [], [], []
             
             for item in items_list:
                 f_obj = item['file_obj']
@@ -608,7 +608,9 @@ else:
                 f_obj.seek(0)
                 tc = extract_true_concentration(item['filename'], f_obj)
                 
-                if df is not None: dfs.append(df)
+                if df is not None:
+                    dfs.append(df)
+                    replicate_stats.append({'count': len(df), 'true_concentration': tc})
                 if tc is not None: true_concs.append(tc)
                 
             if dfs:
@@ -636,7 +638,8 @@ else:
                     'color': default_color, 
                     'active': True, 
                     'dilution': items_list[0].get('custom_dilution', 1.0),
-                    'true_concentration': final_tc
+                    'true_concentration': final_tc,
+                    'replicate_stats': replicate_stats
                 })
 
     with st.expander("🎨 Customize Individual Samples (Labels & Colors)", expanded=True):
@@ -1232,40 +1235,54 @@ else:
                 bar_width = st.slider("Bar/Box Width", min_value=0.1, max_value=1.0, value=0.8, step=0.1, key="c_barwidth", help="Adjust the thickness of the individual bars or boxes.")
                 st.markdown("---")
                 st.markdown("### 💧 Set Dilution Factors")
+                strat_tag = replicate_strategy.split()[0]
                 for ch in active_conc_channels:
-                    for item in processed_data['Concentration'][ch]:
+                    for idx, item in enumerate(processed_data['Concentration'][ch]):
                         if item['active']:
-                            item['dilution'] = st.number_input(f"{item['label']} ({ch})", value=item.get('dilution', 1.0), format="%.1e", key=f"dil_tab3_{item['filename']}_{ch}")
+                            item['dilution'] = st.number_input(
+                                f"{item['label']} ({ch})", 
+                                value=item.get('dilution', 1.0), 
+                                format="%.1e", 
+                                key=f"dil_tab3_{item['filename']}_{ch}_{idx}_{strat_tag}"
+                            )
                 st.markdown("---")
                 graph_type = st.radio("Graph Style", ["Bar Chart", "Dot Plot (Strip)", "Box Plot"])
                 grouping = st.radio("Group By (X-Axis)", ["Channel (Compare Samples)", "Sample (Compare Channels)"])
                 
             with col_c2:
+                def calc_single_conc(count, true_conc, dilution):
+                    if count == 0:
+                        return 0.0
+                    elif true_conc:
+                        machine_df = round(true_conc / (count * 4719.33))
+                        machine_df = max(1, machine_df)
+                        exact_multiplier = true_conc / (count * machine_df)
+                        return count * dilution * exact_multiplier
+                    else:
+                        return count * dilution * 4719.33
+
                 conc_data = []
                 palette_dict = {}
                 for ch in active_conc_channels:
                     active_items = [i for i in processed_data['Concentration'][ch] if i['active']]
                     for item in active_items:
+                        rep_stats = item.get('replicate_stats')
                         
-                        # --- FIXED: Exact ZetaSphere Mathematical Precision ---
-                        if len(item['df']) == 0:
-                            c_val = 0
-                        elif item.get('true_concentration'):
-                            # 1. Reverse-engineer the exact dilution factor typed into the ZetaSphere machine
-                            machine_df = round(item['true_concentration'] / (len(item['df']) * 4719.33))
-                            machine_df = max(1, machine_df) # Prevent division by zero
+                        if rep_stats and len(rep_stats) > 1:
+                            # Calculate each replicate's exact concentration independently
+                            rep_vals = [calc_single_conc(r['count'], r['true_concentration'], item['dilution']) for r in rep_stats]
                             
-                            # 2. Extract the exact volumetric multiplier for this specific recording
-                            # (This perfectly accounts for dropped frames, drift, and temperature fluctuations)
-                            exact_multiplier = item['true_concentration'] / (len(item['df']) * machine_df)
-                            
-                            # 3. Apply the user's UI dilution factor using the exact multiplier
-                            c_val = len(item['df']) * item['dilution'] * exact_multiplier
+                            if replicate_strategy == "Average Data (Preserve Scale)":
+                                # Feed all replicate rows under the same label -> automatic Mean + SD error bars!
+                                for c_val in rep_vals:
+                                    conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': c_val, 'Color': item['color']})
+                            else:
+                                # Sum (Pool) Data -> single summed total (no error bar)
+                                conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': sum(rep_vals), 'Color': item['color']})
                         else:
-                            # Fallback if recording_info.csv is missing
-                            c_val = len(item['df']) * item['dilution'] * 4719.33
+                            c_val = calc_single_conc(len(item['df']), item.get('true_concentration'), item['dilution'])
+                            conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': c_val, 'Color': item['color']})
                             
-                        conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': c_val, 'Color': item['color']})
                         palette_dict[ch if grouping == "Sample (Compare Channels)" else item['label']] = item['color']
                             
                 if conc_data:
@@ -1316,7 +1333,11 @@ else:
             st.markdown("---")
             st.subheader("📊 Concentration Data")
             if conc_data:
-                df_summary = df_conc.groupby(['Channel', 'Sample Label']).agg(Replicates=('Concentration (particles/mL)', 'count'), Mean_Concentration=('Concentration (particles/mL)', 'mean'), SD_Concentration=('Concentration (particles/mL)', 'std')).reset_index()
+                df_summary = df_conc.groupby(['Channel', 'Sample Label']).agg(
+                    Replicates=('Concentration (particles/mL)', 'count'), 
+                    Mean_Concentration=('Concentration (particles/mL)', 'mean'), 
+                    SD_Concentration=('Concentration (particles/mL)', 'std')
+                ).reset_index()
                 df_summary['Mean_Concentration'] = df_summary['Mean_Concentration'].apply(lambda x: f"{x:.2e}")
                 df_summary['SD_Concentration'] = df_summary['SD_Concentration'].fillna(0).apply(lambda x: f"{x:.2e}")
                 st.dataframe(df_summary, use_container_width=True)
