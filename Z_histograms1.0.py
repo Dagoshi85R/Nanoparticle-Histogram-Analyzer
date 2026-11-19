@@ -162,7 +162,7 @@ with st.sidebar:
         "gmm_xmax": st.session_state.get("gmm_xmax", 500), #tab4
         "tab5_color_override": st.session_state.get("tab5_color_override", False), #tab5
         "tab6_color_override": st.session_state.get("tab6_color_override", False), #tab6
-        "t6_bin": st.session_state.get("t6_bin", 25) #tab6
+        "t6_bin": st.session_state.get("t6_bin", 25), #tab6
         "s_show_sd": st.session_state.get("s_show_sd", True), #tab1
         "z_show_sd": st.session_state.get("z_show_sd", True), #tab2
         "c_show_sd": st.session_state.get("c_show_sd", True), #tab3
