@@ -162,7 +162,10 @@ with st.sidebar:
         "gmm_xmax": st.session_state.get("gmm_xmax", 500), #tab4
         "tab5_color_override": st.session_state.get("tab5_color_override", False), #tab5
         "tab6_color_override": st.session_state.get("tab6_color_override", False), #tab6
-        "t6_bin": st.session_state.get("t6_bin", 25) #tab6
+        "t6_bin": st.session_state.get("t6_bin", 25), #tab6
+        "s_show_sd": st.session_state.get("s_show_sd", True), #tab1
+        "z_show_sd": st.session_state.get("z_show_sd", True), #tab2
+        "c_show_sd": st.session_state.get("c_show_sd", True) #tab3
     }
     
         # --- FIXED: LOAD SETTINGS ---
@@ -407,7 +410,7 @@ def apply_custom_style(ax, title, xlabel, ylabel, xlim, bg, fg, grid, draw_legen
         if ax.get_legend() is not None:
             ax.get_legend().remove()
 
-def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, color, style, line_width, label, display_style):
+def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, color, style, line_width, label, display_style, show_sd_band=False):
     # Force data to be strictly numeric and perfectly align it
     df_clean = data.copy()
     df_clean[feature_col] = pd.to_numeric(df_clean[feature_col], errors='coerce')
@@ -436,24 +439,63 @@ def plot_custom_distribution(ax, data, feature_col, bins, x_vals, bin_width, col
         
     # Draw Lines
     if display_style in ["Smooth Curve Only", "Both (Bar + Curve)"]:
-        # Only use KDE if variance allows it
-        if globals().get('use_kde', False) and np.std(x_data) > 0:
-            # SciPy KDE scaling with weights
-            kde = gaussian_kde(x_data, weights=w)
-            total_weight = w.sum() if w is not None else len(x_data)
-            y_smooth = kde(x_vals) * total_weight * bin_width
-            ax.plot(x_vals, y_smooth, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
-            if display_style == "Smooth Curve Only":
-                ax.fill_between(x_vals, 0, y_smooth, color=color, alpha=0.1)
-        else:
-            # Polygon scaling using the weighted counts
-            centers = edges[:-1] + (bin_width / 2)
-            centers_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
-            counts_line = np.concatenate(([0], counts, [0]))
+        can_draw_sd = (
+            show_sd_band
+            and display_style == "Smooth Curve Only"
+            and 'Replicate_ID' in df_clean.columns
+            and 'N_Replicates' in df_clean.columns
+            and int(df_clean['N_Replicates'].iloc[0]) > 1
+        )
+        
+        if can_draw_sd:
+            n_reps = int(df_clean['N_Replicates'].iloc[0])
             
-            ax.plot(centers_line, counts_line, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
-            if display_style == "Smooth Curve Only":
-                ax.fill_between(centers_line, 0, counts_line, color=color, alpha=0.1)
+            if globals().get('use_kde', False) and np.std(x_data) > 0:
+                rep_curves = []
+                for r in range(n_reps):
+                    rep_x = df_clean.loc[df_clean['Replicate_ID'] == r, feature_col].values
+                    if len(rep_x) >= 2 and np.std(rep_x) > 0:
+                        rep_curves.append(gaussian_kde(rep_x)(x_vals) * len(rep_x) * bin_width)
+                    else:
+                        rep_curves.append(np.zeros_like(x_vals))
+                y_mean = np.mean(rep_curves, axis=0)
+                y_sd = np.std(rep_curves, axis=0, ddof=1)
+                
+                ax.plot(x_vals, y_mean, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+                ax.fill_between(x_vals, np.maximum(0, y_mean - y_sd), y_mean + y_sd, color=color, alpha=0.25, linewidth=0)
+            else:
+                rep_counts = []
+                for r in range(n_reps):
+                    rep_x = df_clean.loc[df_clean['Replicate_ID'] == r, feature_col].values
+                    c_r, _ = np.histogram(rep_x, bins=bins)
+                    rep_counts.append(c_r)
+                mean_counts = np.mean(rep_counts, axis=0)
+                sd_counts = np.std(rep_counts, axis=0, ddof=1)
+                
+                centers = edges[:-1] + (bin_width / 2)
+                centers_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                counts_line = np.concatenate(([0], mean_counts, [0]))
+                sd_line = np.concatenate(([0], sd_counts, [0]))
+                
+                ax.plot(centers_line, counts_line, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+                ax.fill_between(centers_line, np.maximum(0, counts_line - sd_line), counts_line + sd_line, color=color, alpha=0.25, linewidth=0)
+        else:
+            # Standard curve drawing (no SD band)
+            if globals().get('use_kde', False) and np.std(x_data) > 0:
+                kde = gaussian_kde(x_data, weights=w)
+                total_weight = w.sum() if w is not None else len(x_data)
+                y_smooth = kde(x_vals) * total_weight * bin_width
+                ax.plot(x_vals, y_smooth, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+                if display_style == "Smooth Curve Only":
+                    ax.fill_between(x_vals, 0, y_smooth, color=color, alpha=0.1)
+            else:
+                centers = edges[:-1] + (bin_width / 2)
+                centers_line = np.concatenate(([edges[0]], centers, [edges[-1]]))
+                counts_line = np.concatenate(([0], counts, [0]))
+                
+                ax.plot(centers_line, counts_line, color=color, linestyle=style, linewidth=line_width, label=curve_lbl)
+                if display_style == "Smooth Curve Only":
+                    ax.fill_between(centers_line, 0, counts_line, color=color, alpha=0.1)
 
 def plot_central_marker(ax, data, color, marker_type):
     val = np.nan
@@ -599,24 +641,29 @@ else:
                     
         # --- PATH B: User Chose "Sum" or "Average" ---
         else:
-            dfs, true_concs = [], []
+            dfs, true_concs, replicate_stats = [], [], []
             
-            for item in items_list:
+            for rep_idx, item in enumerate(items_list):
                 f_obj = item['file_obj']
                 f_obj.seek(0)
                 df = extract_dataframe(item['filename'], f_obj)
                 f_obj.seek(0)
                 tc = extract_true_concentration(item['filename'], f_obj)
                 
-                if df is not None: dfs.append(df)
+                if df is not None:
+                    df = df.copy()
+                    df['Replicate_ID'] = rep_idx
+                    dfs.append(df)
+                    replicate_stats.append({'count': len(df), 'true_concentration': tc})
                 if tc is not None: true_concs.append(tc)
                 
             if dfs:
                 pooled_df = pd.concat(dfs, ignore_index=True)
                 
-                # --- NEW: Apply exact Weights and strict Label Suffixes ---
+                # --- Apply exact Weights and strict Label Suffixes ---
                 if replicate_strategy == "Average Data (Preserve Scale)":
                     pooled_df['Weight'] = 1.0 / len(dfs)
+                    pooled_df['N_Replicates'] = len(dfs)
                     suffix = "(Averaged)"
                     final_tc = sum(true_concs) / len(true_concs) if true_concs else None
                 else:
@@ -636,7 +683,8 @@ else:
                     'color': default_color, 
                     'active': True, 
                     'dilution': items_list[0].get('custom_dilution', 1.0),
-                    'true_concentration': final_tc
+                    'true_concentration': final_tc,
+                    'replicate_stats': replicate_stats
                 })
 
     with st.expander("🎨 Customize Individual Samples (Labels & Colors)", expanded=True):
@@ -676,7 +724,17 @@ else:
                 size_bin_width = st.slider("Size Bin Width (nm)", 1, 50, 10, key="s_bin")
                 max_x_size = st.number_input("Max X-Axis Limit (nm)", 100, 2000, 1000, key="s_max")
                 log_x = st.checkbox("Logarithmic Scale", value=False, key="s_log_x", help="Applies a base-10 logarithmic scale to the size axis.")
-                
+                show_sd_size = False
+                if replicate_strategy == "Average Data (Preserve Scale)":
+                    show_sd_size = st.checkbox(
+                        "Show ±SD Error Band",
+                        value=True,
+                        disabled=(display_style != "Smooth Curve Only"),
+                        key="s_show_sd",
+                        help="Shades ±1 SD across technical replicates (active when Plot Style is set to 'Smooth Curve Only')."
+                    )
+
+
                 st.markdown("---")
                 enable_roi = st.checkbox("🔬 Enable ROI Gating", help="Calculate number of particles for a specific size range.")
                 if enable_roi:
@@ -736,7 +794,7 @@ else:
                         if log_x: ax.set_xscale('log')
                         
                         for ent in entities:
-                            plot_custom_distribution(ax, ent['full_df'], ent['f_col'], bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax, ent['full_df'], ent['f_col'], bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style, show_sd_band=show_sd_size)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                         
                         if enable_roi:
@@ -776,7 +834,7 @@ else:
                             ax = axes[i // cols, i % cols]
                             if log_x: ax.set_xscale('log')
                                 
-                            plot_custom_distribution(ax, ent['full_df'], ent['f_col'], bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax, ent['full_df'], ent['f_col'], bins, x_vals, size_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style, show_sd_band=show_sd_size)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             
                             if enable_roi:
@@ -787,7 +845,8 @@ else:
                             apply_custom_style(ax, ent['label'], "Hydrodynamic Diameter (nm)", "Count", current_limit, bg_color, axes_color, show_grid, draw_legend=False)
                             
                             if facet_share_y and global_max_y > 0:
-                                ax.set_ylim(0, global_max_y * 1.05)
+                                pad = 1.25 if (show_sd_size and display_style == "Smooth Curve Only") else 1.05
+                                ax.set_ylim(0, global_max_y * pad)
                         
                         for j in range(len(entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
@@ -963,7 +1022,16 @@ else:
                 zeta_bin_width = st.slider("Zeta Bin Width (mV)", 1, 20, 5, key="z_bin")
                 min_x_zeta = st.number_input("Min X-Axis Limit (mV)", -200, 0, -100, key="z_min")
                 max_x_zeta = st.number_input("Max X-Axis Limit (mV)", 0, 200, 100, key="z_max")
-                
+                show_sd_zeta = False
+                if replicate_strategy == "Average Data (Preserve Scale)":
+                    show_sd_zeta = st.checkbox(
+                        "Show ±SD Error Band",
+                        value=True,
+                        disabled=(display_style != "Smooth Curve Only"),
+                        key="z_show_sd",
+                        help="Shades ±1 SD across technical replicates (active when Plot Style is set to 'Smooth Curve Only')."
+                    )
+
                 st.markdown("---")
                 show_marginal = st.checkbox("Show Size vs. Zeta Scatter Plot (Marginal Distributions)", value=False)
                 if show_marginal:
@@ -1014,7 +1082,7 @@ else:
                         fig_zeta, ax_zeta = plt.subplots(figsize=(10, 5))
                         fig_zeta.patch.set_facecolor(bg_color)
                         for ent in z_entities:
-                            plot_custom_distribution(ax_zeta, ent['full_df'], ent['f_col'], bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax_zeta, ent['full_df'], ent['f_col'], bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style, show_sd_band=show_sd_zeta)
                             if central_marker != "None": plot_central_marker(ax_zeta, ent['data'], ent['color'], central_marker)
                         apply_custom_style(ax_zeta, "Zeta Potential Distribution", "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=show_legend)
                         st.pyplot(fig_zeta)
@@ -1046,13 +1114,14 @@ else:
                         for i, ent in enumerate(z_entities):
                             ax = axes[i // cols, i % cols]
                                 
-                            plot_custom_distribution(ax, ent['full_df'], ent['f_col'], bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style)
+                            plot_custom_distribution(ax, ent['full_df'], ent['f_col'], bins, x_vals, zeta_bin_width, ent['color'], ent['style'], line_width, ent['label'], display_style, show_sd_band=show_sd_zeta)
                             if central_marker != "None": plot_central_marker(ax, ent['data'], ent['color'], central_marker)
                             
                             apply_custom_style(ax, ent['label'], "Zeta Potential (mV)", "Count", (min_x_zeta, max_x_zeta), bg_color, axes_color, show_grid, draw_legend=False)
                             
                             if facet_share_y and global_max_y > 0:
-                                ax.set_ylim(0, global_max_y * 1.05)
+                                pad = 1.25 if (show_sd_zeta and display_style == "Smooth Curve Only") else 1.05
+                                ax.set_ylim(0, global_max_y * pad)
                         
                         for j in range(len(z_entities), rows * cols): fig.delaxes(axes.flatten()[j])
                         plt.tight_layout()
@@ -1232,40 +1301,62 @@ else:
                 bar_width = st.slider("Bar/Box Width", min_value=0.1, max_value=1.0, value=0.8, step=0.1, key="c_barwidth", help="Adjust the thickness of the individual bars or boxes.")
                 st.markdown("---")
                 st.markdown("### 💧 Set Dilution Factors")
+                strat_tag = replicate_strategy.split()[0]
                 for ch in active_conc_channels:
-                    for item in processed_data['Concentration'][ch]:
+                    for idx, item in enumerate(processed_data['Concentration'][ch]):
                         if item['active']:
-                            item['dilution'] = st.number_input(f"{item['label']} ({ch})", value=item.get('dilution', 1.0), format="%.1e", key=f"dil_tab3_{item['filename']}_{ch}")
+                            item['dilution'] = st.number_input(
+                                f"{item['label']} ({ch})", 
+                                value=item.get('dilution', 1.0), 
+                                format="%.1e", 
+                                key=f"dil_tab3_{item['filename']}_{ch}_{idx}_{strat_tag}"
+                            )
                 st.markdown("---")
                 graph_type = st.radio("Graph Style", ["Bar Chart", "Dot Plot (Strip)", "Box Plot"])
+                show_sd_conc = True
+                if graph_type == "Bar Chart":
+                    show_sd_conc = st.checkbox(
+                        "Show ±SD Error Bars",
+                        value=True,
+                        key="c_show_sd",
+                        help="Displays standard deviation error bars when technical replicates are averaged."
+                    )
                 grouping = st.radio("Group By (X-Axis)", ["Channel (Compare Samples)", "Sample (Compare Channels)"])
                 
             with col_c2:
+                def calc_single_conc(count, true_conc, dilution):
+                    if count == 0:
+                        return 0.0
+                    elif true_conc:
+                        machine_df = round(true_conc / (count * 4719.33))
+                        machine_df = max(1, machine_df)
+                        exact_multiplier = true_conc / (count * machine_df)
+                        return count * dilution * exact_multiplier
+                    else:
+                        return count * dilution * 4719.33
+
                 conc_data = []
                 palette_dict = {}
                 for ch in active_conc_channels:
                     active_items = [i for i in processed_data['Concentration'][ch] if i['active']]
                     for item in active_items:
+                        rep_stats = item.get('replicate_stats')
                         
-                        # --- FIXED: Exact ZetaSphere Mathematical Precision ---
-                        if len(item['df']) == 0:
-                            c_val = 0
-                        elif item.get('true_concentration'):
-                            # 1. Reverse-engineer the exact dilution factor typed into the ZetaSphere machine
-                            machine_df = round(item['true_concentration'] / (len(item['df']) * 4719.33))
-                            machine_df = max(1, machine_df) # Prevent division by zero
+                        if rep_stats and len(rep_stats) > 1:
+                            # Calculate each replicate's exact concentration independently
+                            rep_vals = [calc_single_conc(r['count'], r['true_concentration'], item['dilution']) for r in rep_stats]
                             
-                            # 2. Extract the exact volumetric multiplier for this specific recording
-                            # (This perfectly accounts for dropped frames, drift, and temperature fluctuations)
-                            exact_multiplier = item['true_concentration'] / (len(item['df']) * machine_df)
-                            
-                            # 3. Apply the user's UI dilution factor using the exact multiplier
-                            c_val = len(item['df']) * item['dilution'] * exact_multiplier
+                            if replicate_strategy == "Average Data (Preserve Scale)":
+                                # Feed all replicate rows under the same label -> automatic Mean + SD error bars!
+                                for c_val in rep_vals:
+                                    conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': c_val, 'Color': item['color']})
+                            else:
+                                # Sum (Pool) Data -> single summed total (no error bar)
+                                conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': sum(rep_vals), 'Color': item['color']})
                         else:
-                            # Fallback if recording_info.csv is missing
-                            c_val = len(item['df']) * item['dilution'] * 4719.33
+                            c_val = calc_single_conc(len(item['df']), item.get('true_concentration'), item['dilution'])
+                            conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': c_val, 'Color': item['color']})
                             
-                        conc_data.append({'Channel': ch, 'Sample Label': item['label'], 'Concentration (particles/mL)': c_val, 'Color': item['color']})
                         palette_dict[ch if grouping == "Sample (Compare Channels)" else item['label']] = item['color']
                             
                 if conc_data:
@@ -1296,7 +1387,7 @@ else:
                                 
                         active_palette = {hue: hex_colors[i] for i, hue in enumerate(unique_hues)}
                     
-                    if graph_type == "Bar Chart": sns.barplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, errorbar='sd', capsize=0.1, ax=ax_conc, edgecolor=axes_color, linewidth=line_width, width=bar_width)
+                    if graph_type == "Bar Chart": sns.barplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, errorbar='sd' if show_sd_conc else None, capsize=0.1, err_kws={'linewidth': line_width, 'color': axes_color}, ax=ax_conc, edgecolor=axes_color, linewidth=line_width, width=bar_width)
                     elif graph_type == "Dot Plot (Strip)": sns.stripplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, dodge=True, size=8, ax=ax_conc, edgecolor=axes_color, linewidth=line_width/2)
                     elif graph_type == "Box Plot": sns.boxplot(data=df_conc, x=x_col, y='Concentration (particles/mL)', hue=hue_col, palette=active_palette, ax=ax_conc, fliersize=5, linewidth=line_width, width=bar_width)
                     
@@ -1316,7 +1407,11 @@ else:
             st.markdown("---")
             st.subheader("📊 Concentration Data")
             if conc_data:
-                df_summary = df_conc.groupby(['Channel', 'Sample Label']).agg(Replicates=('Concentration (particles/mL)', 'count'), Mean_Concentration=('Concentration (particles/mL)', 'mean'), SD_Concentration=('Concentration (particles/mL)', 'std')).reset_index()
+                df_summary = df_conc.groupby(['Channel', 'Sample Label']).agg(
+                    Replicates=('Concentration (particles/mL)', 'count'), 
+                    Mean_Concentration=('Concentration (particles/mL)', 'mean'), 
+                    SD_Concentration=('Concentration (particles/mL)', 'std')
+                ).reset_index()
                 df_summary['Mean_Concentration'] = df_summary['Mean_Concentration'].apply(lambda x: f"{x:.2e}")
                 df_summary['SD_Concentration'] = df_summary['SD_Concentration'].fillna(0).apply(lambda x: f"{x:.2e}")
                 st.dataframe(df_summary, use_container_width=True)
