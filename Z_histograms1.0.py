@@ -165,7 +165,7 @@ with st.sidebar:
         "t6_bin": st.session_state.get("t6_bin", 25), #tab6
         "s_show_sd": st.session_state.get("s_show_sd", True), #tab1
         "z_show_sd": st.session_state.get("z_show_sd", True), #tab2
-        "c_show_sd": st.session_state.get("c_show_sd", True) #tab3
+        "c_show_sd": st.session_state.get("c_show_sd", True), #tab3
     }
     
         # --- FIXED: LOAD SETTINGS ---
